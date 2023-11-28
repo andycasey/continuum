@@ -1,0 +1,91 @@
+% Copyright 2023 Andy Casey (Monash) and friends
+% TeX magic by David Hogg (NYU)
+
+\documentclass[modern]{aastex631}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+
+\renewcommand{\twocolumngrid}{}
+\addtolength{\topmargin}{-0.35in}
+\addtolength{\textheight}{0.6in}
+\setlength{\parindent}{3.5ex}
+\renewcommand{\paragraph}[1]{\medskip\par\noindent\textbf{#1}~---}
+
+% figure setup
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[framemethod=tikz]{mdframed}
+\usetikzlibrary{shadows}
+\definecolor{captiongray}{HTML}{555555}
+\mdfsetup{%
+innertopmargin=2ex,
+innerbottommargin=1.8ex,
+linecolor=captiongray,
+linewidth=0.5pt,
+roundcorner=1pt,
+shadow=false,
+}
+\newlength{\figurewidth}
+\setlength{\figurewidth}{0.75\textwidth}
+
+% text macros
+\shorttitle{Stellar continuum modelling}
+\shortauthors{Casey}
+\newcommand{\documentname}{\textsl{Article}}
+\newcommand{\sectionname}{Section}
+
+% math macros
+\newcommand{\unit}[1]{\mathrm{#1}}
+\newcommand{\mps}{\unit{m\,s^{-1}}}
+\newcommand{\kmps}{\unit{km\,s^{-1}}}
+
+% notes
+
+\sloppy\sloppypar\raggedbottom\frenchspacing
+\begin{document}
+
+\title{\Huge Stellar continuum modelling}
+
+\author[0000-0003-0174-0564]{Andrew R. Casey}
+\affiliation{School of Physics \& Astronomy, Monash University}
+\affiliation{Centre of Excellence for Astrophysics in Three Dimensions (ASTRO-3D)}
+
+%\author[0000-0003-2866-9403]{David W. Hogg}
+%\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University}
+%\affiliation{Max-Planck-Institut f\"ur Astronomie, Heidelberg}
+%\affiliation{Flatiron Institute, a division of the Simons Foundation}
+
+
+\begin{abstract}\noindent
+Continuum normalization is a common step when analyzing stellar spectra.
+- various bespoke methods
+- best fit simultaneously with the stellar spectrum
+- that requires a model of the stellar spectrum, which can be expensive to compute
+- 
+\end{abstract}
+
+\keywords{Some --- keywords --- here}
+
+\section*{}\clearpage
+\section{Introduction}\label{sec:intro}
+
+
+Code is available at \url{https://github.com/andycasey/continuum} and is registered in the Python Package Index as \texttt{stellar-continuum}.
+
+\paragraph{Software}
+\texttt{numpy} \citep{numpy} ---
+\texttt{matplotlib} \citep{matplotlib} ---
+\texttt{scipy} \citep{scipy}.
+
+\paragraph{Acknowledgements}
+It is a pleasure to thank
+% All these people are possible co-authors
+    Adam Wheeler (Ohio State University),
+    David W. Hogg (New York University),
+    Megan Bedell (Flatiron Institute),
+.
+% include bibliography
+\bibliographystyle{aasjournal}
+\bibliography{bibliography}
+
+\end{document}
