@@ -66,10 +66,11 @@ shadow=false,
 
 \begin{abstract}\noindent
 Continuum normalization is often a necessary step when analyzing stellar spectra. The best practice is to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but this can be computationally expensive.
-%Methods that estimate the continuum before stellar parameters tend to be biased as a function of stellar parameters or signal-to-noise ratio.
-Here we describe a set of constrained linear models that simultaneously fit stellar absorption, and the joint continuum-instrument response.
-The linear basis ensures that inference is stable and fast.
+We present a forward model to simultaneously fit stellar absorption and the joint continuum-instrument response using two linear models: a non-negative matrix factorization to approximate line absorption in theoretical (normalized) spectra, and a sines-and-cosines basis for the joint continuum-instrument response.
+The non-negative matrix factorization ensures that eigenspectra are strictly additive, and restricts the predicted normalized stellar flux to be at most 1, with the joint continuum-instrument response component to model the rest.
+The linearity of both components ensures that inference is stable and fast.
 We apply these methods to \project{Sloan Digital Sky Survey} optical and infrared spectra of all evolutionary stages: from M-dwarfs to white dwarfs.
+We find good fits to observed spectra, even in situations where the theoretical grid used to approximate line absorption is provably incorrect for some features.
 %The stellar absorption model is built from a non-negative matrix factorization of a theoretical continuum-normalized spectra, which ensures it cannot predict spectra more than 1.
 %The constraints restrict the stellar absorption to 
 We show that we obtain unbiased estimates of the continuum as a function of stellar parameters and signal-to-noise ratios.
@@ -80,11 +81,28 @@ We show that we obtain unbiased estimates of the continuum as a function of stel
 \section*{}\clearpage
 \section{Introduction}\label{sec:intro}
 
+Continuum normalisation is a necessary step
+
+Often needed to be done before stellar parameter determination, as a step towards stellar parameter determination
+
+For measuring equivalent widths, or for full-spectrum fitting, or even for performing radial velocity determination
+
+Many methods. Some done by eye.
+
+Fitting the continuum well requires you to know where the line absorption is. But knowing where the line absorption is requires you to know the stellar parameters.
+
+Best is to fit with the stellar parameters, but is intractable.
+
+For some stars there is NO continuum (e.g., M-dwarfs). 
+
+cite cases of NMF use in astronomy (not that many)
+
 
 \section{Methods}\label{sec:methods}
 
 We will assume a forward model for the data that includes two components: a component to represent continuum-normalized absorption (e.g., line absorption), and a component to represent the smooth continuum.\footnote{Most stellar spectra are not flux-calibrated; the continuum and instrument response enter multiplicatively, but throughout this paper when we refer to the continuum, we mean the joint continuum-instrument response.}
-We will assume both components to be linear models. This is not a strict requirement, but keeping linearity ensures that  inference is fast and stable, and in practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalisation.
+
+We will assume both components to be linear models. This is not a strict requirement, but keeping linearity ensures that  inference is fast and stable, and in practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalisation.\\
 
 
 
@@ -92,11 +110,11 @@ We will assume both components to be linear models. This is not a strict require
 % - NMF is sufficient for representing continuum-normalized spectra
 % - that the theoretical models are OK enough. there are ways they can be wrong (eg hydrogen lines) and still work in practice, or there are ways they can be wrong entirely (eg missing molecular band) and not work at all
 % - that sines and cosines are sufficiently flexible for modelling the large scale continuum
-The data are a one-dimensional spectrum with $P$ pixels, each with wavelength $\lambda_i$, flux $y_i$, and flux error $\sigma_i$ (with $1 \leq i \leq P$). The forward model for these data can be expressed as the element-wise multiplication of the line absorption model $f(\lambda_i; \vecpsi)$ and the continuum-instrument response $g(\lambda_i;\vectheta)$
+The problem set up is where the data are a one-dimensional spectrum with $P$ pixels, each with wavelength $\lambda_i$, flux $y_i$, and flux error $\sigma_i$ (with $1 \leq i \leq P$). The forward model for these data can be expressed as the element-wise multiplication of the line absorption model $f(\lambda_i; \vecpsi)$ and the continuum-instrument response $g(\lambda_i;\vectheta)$
 \begin{align}
     y_i &= f(\lambda_i;\vecpsi)\cdot{}g(\lambda_i;\vectheta) + \mbox{noise}
 \end{align}
-where the components $f(...)$ and $g(...)$ are described below.
+where the components $f(...)$ and $g(...)$ are described below.\\
 
 
 % NMF first
@@ -109,26 +127,57 @@ such that $\vec{V} \in \left[0, 1\right)$ and is zero when no line absorption ex
     \vec{V} \approx \vec{W}\vec{H}
 \end{align}
 where all elements in $\vec{W}$ and $\vec{H}$ are non-negative. 
-%We could construct an approximation directly to $\vec{M}$, but since elements in $\vec{M}$ are non-zero whenever there is line absorption, this would lead to denser matrices $\vecV$ and $\vecH$. 
-For this approximation we must chose the number of components to use $C$, which is significantly smaller than both $N$ and $P$. Here $\vec{W}$ is a $N \times C$ matrix that can be thought of as $C$ amplitudes per theoretical spectrum, and $\vec{H}$ is a $C \times P$ matrix of $C$ corresponding eigenspectra. Figure~\ref{fig:nmf} illustrates the NMF procedure and shows some example infrared eigenspectra $\vec{H}$.
+We could construct an approximation directly to $\vec{M}$, but this would lead to much denser matrices: there are \emph{no} elements of $\vec{M}$ that are exactly 0, but there are \emph{many} elements in $\vec{V}$ that are 0 (e.g., when there is no line absorption).
+For this approximation we must chose the number of components to use $C$, which is significantly smaller than both $N$ and $P$. Here $\vec{W}$ is a $N \times C$ matrix that can be thought of as $C$ amplitudes per theoretical spectrum, and $\vec{H}$ is a $C \times P$ matrix of $C$ corresponding eigenspectra. Figure~\ref{fig:nmf} illustrates the NMF procedure and shows some example infrared eigenspectra $\vec{H}$. \\
 
 % Figure NMF
 
-With our approximating matrix $\vec{H}$ we can now define the line absorption function $f(\lambda_i;\vecpsi)$ 
+\noindent{}With the matrix $\vec{H}$ we can now define the line absorption function $f(\lambda_i;\vecpsi)$ 
 \begin{align}
     f(\lambda_i;\vecpsi) = 1 - \vecpsi\vecH \label{eq:f}
 \end{align}
-where $\vecpsi \in [0, \infty)$ is a row vector of $C$ elements. $\vecpsi$ is analogous to a single row in $\vecW$: it represents the $C$ amplitudes needed to reconstruct the stellar absorption from the $C$ eigenspectra in $\vecH$. Note that because $\vecpsi$ and $\vecH$ are both restricted to have non-negative elements, Equation~\ref{eq:f} shows that the maximum value that can be predicted by $f(...)$ is 1. This restricts the flexibility of $f(...)$ to only be able to model continuum-normalized flux values, leaving $g(...)$ to represent the joint continuum-instrument response. While negative continuum-normalized flux values are allowed by Equation~\ref{eq:f} (i.e., $\vecpsi\vecH > 1$), such solutions are not favoured in practice.
+where $\vecpsi \in [0, \infty)$ is a row vector of $C$ elements. $\vecpsi$ is analogous to a single row in $\vecW$: it represents the $C$ amplitudes needed to reconstruct the stellar absorption from the $C$ eigenspectra in $\vecH$. Note that because $\vecpsi$ and $\vecH$ are both restricted to have non-negative elements, Equation~\ref{eq:f} shows that the maximum value that can be predicted by $f(...)$ is 1. This restricts the flexibility of $f(...)$ to only be able to model continuum-normalized flux values, leaving $g(...)$ to represent the joint continuum-instrument response. While negative continuum-normalized flux values are allowed by Equation~\ref{eq:f} (i.e., $\vecpsi\vecH > 1$), this could be readily compensated by a negative continuum model $g(...) < 0$ and such solutions are not favoured in practice.\\
 
+There are many suitable choices for the continuum-instrument response model $g(\lambda_i;\vectheta)$. Here we chose a sine-and-cosine basis because it is a linear representation, and is sufficiently flexible for modelling the joint continuum-instrument response across a variety of spectrographs. The component $g(\lambda_i;\vectheta)$ is expressed as compactly as
+\begin{align}
+    g(\lambda_i;\vectheta) = \vec{A}(\lambda_i)\vectheta
+\end{align}
+where $\vec{A}(\lambda_i)$ returns a design matrix where the elements of the $j$th column
+\begin{align}
+    \vec{A}_{j}(\lambda_i) & = \left\{\begin{array}{cl}\displaystyle\cos\left(\frac{\pi\,[j-1]}{L}\,\lambda_i\right) & \mbox{for $j$ odd} \\[3ex]
+                                       \displaystyle\sin\left(\frac{\pi\,j}{L}\,\lambda_i\right) & \mbox{for $j$ even}\end{array}\right. ~,
+\end{align}
 
+The design matrix $\vec{A}(\vec{\lambda})$ can be constructed \emph{a priori} before inference begins.
+
+%In later sections we describe applications of our method to real data. For now we will describe a few options that we found to work reasonably well across all settings, which we have since established as default behaviour in the accompanying software implementation. When faced with the choice of how many spectra to include when performing non-negative matrix factorization, we found good results by including everything that could fit into memory. Using limited precision floats (e.g., float-8) helped. Initialising with non-negative double singular value decomposition (with zeros filled with small random values) seemed to work very well. Multiplicative updates.
 
 % put this in discussion
 %As we discuss in Section~\ref{sec:discussion}, this is not true of all linear models: it is a design choice that leads to this strict constraint. Other linear models (e.g., PCA) allow for summation of large positive and negative amplitudes, leading to  of positive and negative eigenspectra, 
 
+We experimented with choices of initialisation and inference. Initializing from small ($10^{-12}$) values of $\vecpsi$ and a closed-form solution of $\vectheta$ seemed to work well in many scenarios. Since both model components are linear and have closed-form solutions, we did find some success by alternating between solving for $\vecpsi$ and $\vectheta$, but ultimately chose to optimize all parameters $\{\vecpsi,\vectheta\}$ simultaneously.  
 
+
+\subsection{Application to APOGEE spectra}
+
+- choice of grid
+- regions for continuum modelling
+
+The continuum-instrument response of the APOGEE detector was modelled using a 3 degree sines-and-cosines with a length-scale $L = 1300$, but allowing for different coefficients per chip.
+
+- choices of iterations, initialisation, etc, 
+- eigenspectra examples already shown
+
+
+
+\subsection{Application to BOSS spectra}
+
+- bosz grid convolved to what resolution + sampled at X
 
 
 \section{Results}\label{sec:results}
+
+- figure showing the 
 
 \section{Conclusions}\label{sec:conclusions}
 
