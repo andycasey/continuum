@@ -42,6 +42,8 @@ shadow=false,
 \newcommand{\vecH}{\mathbf{H}}
 \newcommand{\vecV}{\mathbf{V}}
 \newcommand{\hadamard}{\odot}
+\newcommand{\apogee}{\project{APOGEE}}
+\newcommand{\boss}{\project{BOSS}}
 
 % math macros
 \newcommand{\unit}[1]{\mathrm{#1}}
@@ -187,14 +189,11 @@ The method can be readily applied to real data once the eigenspectra $\vecH$ hav
 \subsection{Application to APOGEE spectra}
 \label{sec:apogee}
 
-- choice of grid
-- regions for continuum modelling
+The \apogee\ spectrograph spans approximately 1.5 to 1.7\,microns and has a resolving power of about 22,500 \citep{wilson}. There are three chips, which we chose to model as separate continuum regions (each with their own continuum coefficients $\vecpsi$). We used a 3rd order sine-and-cosine basis with length scale $L = 1300$, corresponding to 7 continuum coefficients per chip.
 
-The continuum-instrument response of the APOGEE detector was modelled using a 3 degree sines-and-cosines with a length-scale $L = 1300$, but allowing for different coefficients per chip.
+We use the \todo{DR17 grids computed for FERRE, some in non-LTE}. The data are assumed to be resampled onto a rest-frame wavelength sampling that is uniform in log-spacing. We took the high-resolution theoretical grids and convolved them to a spectral resolution of 22,500 and sampled it to match the data. In total there are nearly \todo{1 M} spectra each with 8,575 pixels. This proved too large to fit in memory when computing the eigenspectra $\vecH$, forcing us to skip every 10th spectra.
 
-- choices of iterations, initialisation, etc, 
-- eigenspectra examples already shown
-
+We chose to use 32 eigenspectra to construct the line absorption model, some of which are shown in Figure~\ref{fig:schematic}. During training, the hydrogen lines separate out immediately before other absorption features are recognizable. The final eigenspectra include multiple hydro \todo{BEER OCLOCK}
 
 
 \subsection{Application to BOSS spectra}
@@ -216,7 +215,7 @@ The continuum-instrument response of the APOGEE detector was modelled using a 3 
 
 
 
-Code is available at \url{https://github.com/andycasey/continuum} and is registered in the Python Package Index as \texttt{stellar-continuum}.
+%Code is available at \url{https://github.com/andycasey/continuum} and is registered in the Python Package Index as \texttt{stellar-continuum}.
 
 \paragraph{Software}
 \texttt{numpy} \citep{numpy} ---
