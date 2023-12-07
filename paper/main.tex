@@ -40,7 +40,7 @@ shadow=false,
 \newcommand{\vecpsi}{\boldsymbol{\psi}}
 \newcommand{\vecW}{\mathbf{W}}
 \newcommand{\vecH}{\mathbf{H}}
-\newcommand{\vecV}{\mathbf{V}}
+\newcommand{\vecX}{\mathbf{X}}
 \newcommand{\hadamard}{\odot}
 \newcommand{\apogee}{\project{APOGEE}}
 \newcommand{\boss}{\project{BOSS}}
@@ -72,7 +72,7 @@ shadow=false,
 
 
 \begin{abstract}\noindent
-Continuum normalization is often a necessary step when analyzing stellar spectra. The best practice is to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but computing stellar spectra can be expensive.
+Continuum normalization is often a necessary step when analyzing stellar spectra. Best practice is to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but computing stellar spectra can be expensive.
 We present a forward model to simultaneously fit stellar absorption and the joint continuum-instrument response using two linear models: a non-negative matrix factorization to approximate line absorption in theoretical (normalized) spectra, and a sines-and-cosines basis for the joint continuum-instrument response.
 The non-negative matrix factorization ensures that eigenspectra are strictly additive, thereby restricting the predicted normalized stellar flux to be at most 1, with the joint continuum-instrument response component to describe the rest.
 The linearity of both components ensures that inference is stable and fast.
@@ -122,16 +122,16 @@ where $\hadamard$ represents the element-wise (Hadamard) product and the compone
 
 
 % NMF first
-The line absorption model $f(\lambda_i;\vecpsi)$ is constructed from a grid of $N$ theoretical spectra each with $D$  continuum-normalized fluxes, which we denote as $\vec{M}$. In the applications that we present, the data are assumed to have the same wavelength sampling and a consistent line spread function, such that we use a grid where $D = P$. Other situations are permitted, but at inference time there is a need to interpolate the line absorption to the $P$ observed pixels. With our $\vec{M}$ matrix of continuum-normalized theoretical flux values, we then defined \emph{stellar absorption} $\vecV$ to be
+The line absorption model $f(\lambda_i;\vecpsi)$ is constructed from a grid of $N$ theoretical spectra each with $D$  continuum-normalized fluxes, which we denote as $\vec{M}$. In the applications that we present, the data are assumed to have the same wavelength sampling and a consistent line spread function, such that we use a grid where $D = P$. Other situations are permitted, but at inference time there is a need to interpolate the line absorption to the $P$ observed pixels. With our $\vec{M}$ matrix of continuum-normalized theoretical flux values, we then defined \emph{stellar absorption} $\vecX$ to be
 \begin{align}
-    \vec{V} = 1 - \vec{M}
+    \vecX = 1 - \vec{M}
 \end{align}
-such that $\vec{V} \in \left[0, 1\right)$ and is zero when no line absorption exists. This is a `trick' that allows us to construct a highly constrained and sparse approximation to the matrix $\vecV$ using non-negative matrix factorization (NMF) such that 
+such that $\vecX \in \left[0, 1\right)$ and is zero when no line absorption exists. This is a `trick' that allows us to construct a highly constrained and sparse approximation to the matrix $\vecX$ using non-negative matrix factorization (NMF) such that 
 \begin{align}
-    \vec{V} \approx \vec{W}\vec{H} \label{eq:nmf}
+    \vecX \approx \vec{W}\vec{H} \label{eq:nmf}
 \end{align}
 where all elements in $\vec{W}$ and $\vec{H}$ are non-negative. 
-We could construct an approximation directly to $\vec{M}$, but this would lead to much denser matrices: there are \emph{no} elements of $\vec{M}$ that are exactly 0 (i.e., total line absorption), but there are \emph{many} elements in $\vec{V}$ that are 0 (i.e., no line absorption). For this approximation we must select the number of components $C$ to use, which is significantly smaller than both the number of theoretical spectra $N$ and the number of pixels $D$ per theoretical spectrum. Here $\vec{W}$ is a $N \times C$ matrix that can be thought of as $C$ amplitudes per theoretical spectrum, and $\vec{H}$ is a $C \times D$ matrix of $C$ corresponding eigenspectra. Figure~\ref{fig:schematic} illustrates the NMF procedure and shows some example infrared eigenspectra $\vec{H}$. \\
+We could construct an approximation directly to $\vec{M}$, but this would lead to much denser matrices: there are \emph{no} elements of $\vec{M}$ that are exactly 0 (i.e., total line absorption), but there are \emph{many} elements in $\vecX$ that are 0 (i.e., no line absorption). For this approximation we must select the number of components $C$ to use, which is significantly smaller than both the number of theoretical spectra $N$ and the number of pixels $D$ per theoretical spectrum. Here $\vec{W}$ is a $N \times C$ matrix that can be thought of as $C$ amplitudes per theoretical spectrum, and $\vec{H}$ is a $C \times D$ matrix of $C$ corresponding eigenspectra. Figure~\ref{fig:schematic} illustrates the NMF procedure and shows some example infrared eigenspectra $\vec{H}$. \\
 
 \begin{figure*}
     \caption{A schematic illustrating the non-negative matrix factorization procedure, with some example infrared eigenspectra. \label{fig:schematic}}
@@ -163,15 +163,15 @@ where $\vec{A}(\lambda_i)$ returns a design matrix where the elements of the $j$
 
 The line absorption model $f(\lambda_i;\vecpsi)$ can be easily constructed from a grid of theoretical continuum-normalized spectra. In later sub-sections we discuss the specific choices made for the \emph{APOGEE} and \emph{BOSS} applications, but for now we discuss some general principles and practices that we found successful. The objective function to minimize
 \begin{align}
-    \chi^2 = ||\vecV - \vecW\vecH||^2
+    \chi^2 = ||\vecX - \vecW\vecH||^2
 \end{align}
 \noindent{}is the Frobenius norm (the squared approximation error). This can be solved through coordinate descent, or through the multiplicative update rules developed by \citet{Lee:2000}:
 \begin{align}
-    \vecW_{ij}^{\mathrm{(new)}} \leftarrow \vecW_{ij} \frac{\left[\vecV\vecH\transpose\right]_{ij}}{\left[\vecW\vecH\vecH\transpose\right]_{ij}} \quad \phantom{.}\\
-    \vecH_{ij}^{\mathrm{(new)}} \leftarrow \vecH_{ij} \frac{\left[\vecW\transpose\vecV\right]_{ij}}{\left[\vecW\transpose\vecW\vecH\right]_{ij}} \quad .
+    \vecW_{ij}^{\mathrm{(new)}} \leftarrow \vecW_{ij} \frac{\left[\vecX\vecH\transpose\right]_{ij}}{\left[\vecW\vecH\vecH\transpose\right]_{ij}} \quad \phantom{.}\\
+    \vecH_{ij}^{\mathrm{(new)}} \leftarrow \vecH_{ij} \frac{\left[\vecW\transpose\vecX\right]_{ij}}{\left[\vecW\transpose\vecW\vecH\right]_{ij}} \quad .
 \end{align}
 
-We used the \texttt{scipy.decomposition.NMF} implementation \citep{scipy} with some minor adjustments to minimize the memory requirements (e.g., allowing for lower precision float types). We used no regularization on $\vecW$ or $\vecH$. We found substantial improvements by initializing $\vecH$ with non-negative double singular value decomposition with zeros filled-in with the average of $\vecV$ (the default behavior in the \texttt{scipy} implementation). Initializing with random or small non-negative values produced comparable results but required many more iterations. We stopped the approximation of $\vecW$ and $\vecH$ after 1,000 iterations of multiplicative updates. This took minutes to hours to complete, depending on the size of the theoretical grid $\vecV$.\\
+We used the \texttt{scipy.decomposition.NMF} implementation \citep{scipy} with some minor adjustments to minimize the memory requirements (e.g., allowing for lower precision float types). We used no regularization on $\vecW$ or $\vecH$. We found substantial improvements by initializing $\vecH$ with non-negative double singular value decomposition with zeros filled-in with the average of $\vecX$ (the default behavior in the \texttt{scipy} implementation). Initializing with random or small non-negative values produced comparable results but required many more iterations. We stopped the approximation of $\vecW$ and $\vecH$ after 1,000 iterations of multiplicative updates. This took minutes to hours to complete, depending on the size of the theoretical grid $\vecX$.\\
 
 
 There are no requirements on the number of grid dimensions (e.g., whether or not to include $[\alpha/\mathrm{Fe}]$, $[\mathrm{C/Fe}]$), and no strict requirements (see Section~\ref{sec:discussion}) on the spacing between grid points. The only implicit requirement is that the grid should approximately span the range of stars that you intent to apply the method.\footnote{This is more of a recommendation than a requirement. For example, in practice we found that a grid trained on OBA-type stars was also sufficient to model many white dwarf spectra.} For this reason, we chose to include as many spectra as our memory constraints would allow. If the number of spectra exceeded memory constraints, we would opt to skip every $n$th theoretical spectrum.\\
@@ -185,21 +185,33 @@ There are no requirements on the number of grid dimensions (e.g., whether or not
 
 The method can be readily applied to real data once the eigenspectra $\vecH$ have been computed. We experimented with choices of initialisation and inference. Since both components are linear and have closed-form solutions, we did find some success by alternating between solving for $\vecpsi$ and $\vectheta$, but ultimately chose to optimize all parameters $\{\vecpsi,\vectheta\}$ simultaneously. The number of parameters scales as $C + n_\textrm{regions}(2n_\textrm{degree} + 1)$: $C$ amplitudes for $C$ eigenspectra ($\vecpsi$), and $2n_\textrm{degree} + 1$ sine-and-cosine coefficients ($\vectheta$) per chosen continuum region (e.g., per chip). Initializing from small ($10^{-12}$) values of $\vecpsi$ and a closed-form solution of $\vectheta$ (conditioned on small $\vecpsi$) seemed to work well in many scenarios. \\
 
-
-\subsection{Application to APOGEE spectra}
+\subsection{APOGEE spectra}
 \label{sec:apogee}
 
-The \apogee\ spectrograph spans approximately 1.5 to 1.7\,microns and has a resolving power of about 22,500 \citep{wilson}. There are three chips, which we chose to model as separate continuum regions (each with their own continuum coefficients $\vecpsi$). We used a 3rd order sine-and-cosine basis with length scale $L = 1300$, corresponding to 7 continuum coefficients per chip.
+The \apogee\ spectrograph spans approximately 1.5 to 1.7\,microns and has a resolving power of about 22,500 \citep{wilson}. There are three chips, which we chose to model as separate continuum regions (each with their own continuum coefficients $\vecpsi$). We used a 3rd order sine-and-cosine basis with length scale $L = 1300$, corresponding to 7 continuum coefficients per chip.\\
 
-We use the \todo{DR17 grids computed for FERRE, some in non-LTE}. The data are assumed to be resampled onto a rest-frame wavelength sampling that is uniform in log-spacing. We took the high-resolution theoretical grids and convolved them to a spectral resolution of 22,500 and sampled it to match the data. In total there are nearly \todo{1 M} spectra each with 8,575 pixels. This proved too large to fit in memory when computing the eigenspectra $\vecH$, forcing us to skip every 10th spectra.
+We use the \todo{DR17 grids computed for FERRE, some in non-LTE}. The data are assumed to be resampled onto a rest-frame wavelength sampling that is uniform in log-spacing. We took the high-resolution theoretical grids and convolved them to a spectral resolution of 22,500 and sampled it to match the data. In total there are nearly \todo{1 M} spectra each with 8,575 pixels. This proved too large to fit in memory when computing the eigenspectra $\vecH$, forcing us to skip every 10th spectra.\\
 
-We chose to use 32 eigenspectra to construct the line absorption model, some of which are shown in Figure~\ref{fig:schematic}. During training, the hydrogen lines separate out immediately before other absorption features are recognizable. The final eigenspectra include multiple hydro \todo{BEER OCLOCK}
+We chose to use 32 eigenspectra to construct the line absorption model, some of which are shown in Figure~\ref{fig:schematic}. During training, the hydrogen lines separate out immediately before other absorption features are recognizable. After training is complete, there are multiple eigenspectra that only have hydrogen lines: some narrow, and some broad. Eigenspectra with only recognizable patterns of molecular features are also present. The remaining eigenspectra have line absorption at many different wavelengths, representing something akin to overall metallicity. \\
+
+With these eigenspectra and continuum settings, we simultaneously fit line absorption and the joint continuum-instrument response for all \apogee\ spectra in SDSS-IV DR17 \citep{dr17} and \apogee\ spectra acquired by the Milky Way Mapper (MWM) in SDSS-V \citep{kollmeier}. In total there are \todo{X} \apogee\ spectra fit by this process: \todo{X} combined spectra and \todo{X} individual visits. We fit combined (co-added) spectra first, and for individual visit spectra we analytically computed the continuum coefficients $\vectheta$ for that visit, conditioned on the $\vecpsi$ found from the combined fit. In practice this implies that the combined and visit spectra for the same star share the same amplitudes $\vecpsi$ for computing rectified flux, but may have different continuum coefficients per visit. Figure~\ref{fig:example-apogee-spectra} show example \apogee\ rectified spectra for different spectral types. 
+
+\begin{figure}
+    \caption{Example rectified \apogee\ spectra (black) and best-fitting rectified line absorption (red) for different spectral types. \label{fig:example-apogee-spectra}}
+\end{figure}
 
 
 \subsection{Application to BOSS spectra}
+\label{sec:}
 
-- bosz grid convolved to what resolution + sampled at X
+SDSS-V is acquiring optical spectra for millions of Milky Way stars using the \boss\ 
+low-resolution ($\mathcal{R} \sim 4{,}000$) spectrograph at Apache Point Observatory (APO) and Las Campanas Observatory (LCO). Although the highest priority targets observed by \boss\ tend to be Black Hole Mapper (BHM) targets, many Milky Way stars are included per field, either because they are specifically targeted as part of a Milky Way Mapper carton\footnote{`Cartons' are how targets are assigned in SDSS-V.}, or because they are standard stars.\\
 
+We took all \boss\ spectra where the source was allocated to a Milky Way Mapper carton, or spectra where the source was allocated to a stellar-like carton. \todo{Some description of stellar-like.} For these spectra we fit the line absorption and joint continuum-instrument response.\\
+
+We used the BOSZ spectral grid to construct eigenspectra for a line absorption model for \boss\ spectra. This is a high-resolution ($\mathcal{R} \sim 300{,}000$) finely sampled theoretical grid that spans a sufficiently large range in stellar parameters. We convolved the spectra to the nominal mean resolving power of the \boss\ spectrograph ($\mathcal{R} \sim 4{,}000$) and resampled it to the same pixels that the \boss\ spectra are resampled to: a uniform-in-log wavelength sampling from approximately 360\,nm until \todo{1000\,nm}. We clipped any BOSZ flux values with emission lines exceeding normalized flux values of 1, as they would violate our NMF requirements. As we discuss in later sections, any emission lines are sufficiently rare in stellar spectra that they do not contribute significantly to the $\chi^2$ at inference time.\\
+
+We used all \todo{X} BOSZ spectra to construct a line absorption matrix $\vecX$ and find the approximating matrices $\vecW$ and $\vecH$. For fitting \boss\ spectra, we separated the continuum fits into two chunks to represent the blue and red chip of the detector. Most of the time the blue and red chips are correctly merged together to produce a seamless contiguous spectrum from \todo{300\,nm to 1000,\nm}, but we noticed there could some times be jumps in the spectrum due to an imperfect merge. For these reasons, we used two sections from \todo{3750\,\AA\ to 6000\,\AA and 6050\,\AA to 10000\,\AA}. We chose a \todo{3rd} order sines-and-cosines basis with a length scale $L = X$\,\AA. Following what we did with \apogee\ spectra, we fit the combined \boss\ spectrum first for a given star, and then analytically computed $\vectheta{}|\vecpsi$: the continuum coefficients $\vectheta$ for the given visit, conditioned on the amplitudes optimized from the combined spectrum $\vecpsi$.
 
 \section{Results}\label{sec:results}
 
