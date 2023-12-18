@@ -72,16 +72,23 @@ shadow=false,
 
 
 \begin{abstract}\noindent
-Continuum normalization is often a necessary step when analyzing stellar spectra. Best practice is to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but computing stellar spectra can be expensive.
-We present a forward model to simultaneously fit stellar absorption and the joint continuum-instrument response using two linear models: a non-negative matrix factorization to approximate line absorption in theoretical (normalized) spectra, and a sines-and-cosines basis for the joint continuum-instrument response.
-The non-negative matrix factorization ensures that eigenspectra are strictly additive, thereby restricting the predicted normalized stellar flux to be at most 1, with the joint continuum-instrument response component to describe the rest.
+Continuum normalization is often a necessary step when analyzing stellar spectra. 
+%The best approach is to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but continuum normalization is usually required before estimating the stellar parameters.
+We present a forward model to simultaneously fit stellar absorption and the joint continuum-instrument response using two linear models: a non-negative matrix factorization to approximate line absorption,
+% in theoretical (normalized) spectra, 
+and a sines-and-cosines basis for the joint continuum-instrument response.
+The non-negative matrix factorization ensures that basis spectra are strictly additive, thereby restricting the predicted normalized flux to be at most 1, with the sines-and-cosines basis to describe the rest.
 The linearity of both components ensures that inference is stable and fast.
-We apply these methods to \project{Sloan Digital Sky Survey} optical and infrared spectra of all evolutionary stages: from M-dwarfs to white dwarfs.
-We find good fits to observed spectra, even in situations where the theoretical grid used to approximate line absorption is provably incorrect for some features.
-%The stellar absorption model is built from a non-negative matrix factorization of a theoretical continuum-normalized spectra, which ensures it cannot predict spectra more than 1.
-%The constraints restrict the stellar absorption to 
-We show that we obtain unbiased estimates of the continuum as a function of stellar parameters and signal-to-noise ratios.
-This approach largely eliminates subjectivity in stellar continuum normalization.
+We describe three variants of this approach:
+    (1) a model-driven approach where line absorption is factorized entirely from continuum-normalized theoretical spectra;
+    (2) a purely data-driven approach where line absorption and continuum are fit entirely from data;
+    and
+    (3) a hybrid approach where basis spectra are initialized from factorization of theoretical spectra, but iteratively adjusted to fit data. 
+We apply these methods to \project{Sloan Digital Sky Survey} optical and infrared spectra of stars spanning evolutionary stages from pre-main-sequence stars to white dwarfs.
+We find good fits to data, even for the model-driven variant where theoretical spectra used to factorize line absorption is provably incorrect for some features.
+We show that the basis amplitudes can be used to reliably estimate stellar parameters and chemical abundances, 
+and that we obtain low bias estimates of the continuum as a function of stellar parameters and signal-to-noise ratios.
+%This approach largely eliminates subjectivity in stellar continuum normalization.
 \end{abstract}
 
 \keywords{Some --- keywords --- here}
@@ -89,6 +96,7 @@ This approach largely eliminates subjectivity in stellar continuum normalization
 \section*{}\clearpage
 \section{Introduction}\label{sec:intro}
 
+Continuum normalization is a subject
 Continuum normalisation is a necessary step
 
 Often needed to be done before stellar parameter determination, as a step towards stellar parameter determination
@@ -130,8 +138,8 @@ such that $\vecX \in \left[0, 1\right)$ and is zero when no line absorption exis
 \begin{align}
     \vecX \approx \vec{W}\vec{H} \label{eq:nmf}
 \end{align}
-where all elements in $\vec{W}$ and $\vec{H}$ are non-negative. 
-We could construct an approximation directly to $\vec{M}$, but this would lead to much denser matrices: there are \emph{no} elements of $\vec{M}$ that are exactly 0 (i.e., total line absorption), but there are \emph{many} elements in $\vecX$ that are 0 (i.e., no line absorption). For this approximation we must select the number of components $C$ to use, which is significantly smaller than both the number of theoretical spectra $N$ and the number of pixels $D$ per theoretical spectrum. Here $\vec{W}$ is a $N \times C$ matrix that can be thought of as $C$ amplitudes per theoretical spectrum, and $\vec{H}$ is a $C \times D$ matrix of $C$ corresponding eigenspectra. Figure~\ref{fig:schematic} illustrates the NMF procedure and shows some example infrared eigenspectra $\vec{H}$. \\
+where all elements in $\vecX$, $\vec{W}$, and $\vec{H}$ are required to be non-negative. 
+We could construct an approximation directly to $\vec{M}$, but this would lead to denser matrices: there are \emph{no} elements of $\vec{M}$ that are exactly 0 (i.e., total line absorption), but there are \emph{many} elements in $\vecX$ that are 0 (i.e., no line absorption). For this approximation we must select the number of components $C$ to use, which is significantly smaller than both the number of theoretical spectra $N$ and the number of pixels $D$ per theoretical spectrum. Here $\vec{W}$ is a $N \times C$ matrix that can be thought of as $C$ amplitudes per theoretical spectrum, and $\vec{H}$ is a $C \times D$ matrix of $C$ corresponding eigenspectra. Figure~\ref{fig:schematic} illustrates the NMF procedure and shows some example infrared eigenspectra $\vec{H}$. \\
 
 \begin{figure*}
     \caption{A schematic illustrating the non-negative matrix factorization procedure, with some example infrared eigenspectra. \label{fig:schematic}}
@@ -216,6 +224,10 @@ We used all \todo{X} BOSZ spectra to construct a line absorption matrix $\vecX$ 
 \section{Results}\label{sec:results}
 
 \begin{figure}
+    \caption{A Gaia H-R diagram showing the median $\chi^2$ per bin.}
+\end{figure}
+
+\begin{figure}
     \caption{Median observed rectified flux values as a function of S/N ratio showing that there is no bias as a function of S/N ratio.}
 \end{figure}
 
@@ -232,10 +244,28 @@ We used all \todo{X} BOSZ spectra to construct a line absorption matrix $\vecX$ 
 
 \begin{figure*}
     \caption{The median pixel $\chi^2$ value as a function of \emph{Gaia} $\mathrm{BP} - \mathrm{RP}$ color for main-sequence stars observed with the BOSS spectrograph. \todo{Should expect to see increasing residuals due to TiO bands not captured by the model, and emission lines.}}
+    % Could do the same showing standard deviation per bin
 \end{figure*}
 
 
 - figure showing the 
+
+\section{Discussion}\label{sec:discussion}
+
+- getting good fits even with bad models: the hydrogen lines in the apogee grid are knowingly incorrect, but we see no difference in the $\chi^2$ at those wavelengths. That is because the hydrogen lines separate out into very clean eigenspectra, where the amplitude for that eigenspectra is not required to vary smoothly with other amplitudes
+
+- biases as a function of S/N or labels
+
+- poorly modelled regions as a function of pixel
+
+- $\chi^2$ across the HRD
+
+- excellent way to identify regions where models and observations may disagree
+
+- orthogonality of the two model components
+
+- issue with M-giant eigenspectra when they were over-represented in the sample
+
 
 \section{Conclusions}\label{sec:conclusions}
 
@@ -253,6 +283,7 @@ Code is available at \url{https://github.com/andycasey/continuum} and is registe
 It is a pleasure to thank
 % All these people are possible co-authors
     Adam Wheeler (Ohio State University),
+    Andrew Saydjari (Harvard),
     David W. Hogg (New York University),
     Megan Bedell (Flatiron Institute),
 .
