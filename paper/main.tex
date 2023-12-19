@@ -74,7 +74,7 @@ shadow=false,
 Continuum normalization is often a necessary step when analyzing stellar spectra. 
 %The best approach is to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but continuum normalization is usually required before estimating the stellar parameters.
 We present a forward model to simultaneously fit stellar absorption and the joint continuum-instrument response using two linear components: a non-negative matrix factorization to approximate line absorption, and a sines-and-cosines basis for the joint continuum-instrument response.
-The non-negative matrix factorization ensures that basis spectra are strictly additive, thereby restricting the predicted normalized flux to be at most 1, with the sines-and-cosines basis to describe the rest.
+The non-negative matrix factorization ensures that basis spectra are strictly additive, thereby restricting the predicted normalized flux to be at most 1, with the sines-and-cosines basis to describe the remaining variance.
 The linearity of both components ensures that inference is stable and fast.
 We describe three variants of this method:
     (1) a model-driven approach where line absorption is factorized entirely from continuum-normalized theoretical spectra;
@@ -98,16 +98,14 @@ and that we obtain low bias estimates of the continuum as a function of stellar 
 \section{Introduction}\label{sec:intro}
 
 Continuum normalization is often a necessary step before estimating stellar parameters and chemical abundances.
-This process is ripe with subjectivity and bias.
-There is general agreement in the literature that consistent continuum normalization is important, but no apparent consensus on how it should be done.\\
+This process is ripe with subjectivity.
+While there is general agreement in the literature that consistent continuum normalization is important, there is apparently no consensus on how it should be done.\\
 
-Fitting the continuum well requires you to know where there is line absorption. But knowing where there is line absorption requires you to (at least) know the stellar parameters. Classical spectroscopists might estimate some coarse continuum for the spectrum (or for each order, in the case of high-resolution echelle spectra), and then refine the continuum for every measured absorption line. This process is still often done by hand (albeit they are often experienced hands). Industrial spectroscopists might simply aim for a \emph{consistent} continuum normalization procedure, even if the process only estimates a pseudo-continuum for comparison, and not the true continuum. In an ideal scenario the pseudo-continuum is fit jointly with the stellar parameters.\\
+Fitting the continuum well requires you to know where there is line absorption. But knowing where there is line absorption requires you to (at least) know the stellar parameters. Without knowing the stellar parameters (or having a good model for line absorption), spectroscopists have been forced to use asymmetric so-called sigma clipping (i.e., to exclude data points points $N\sigma$ below a continuum fit but keep points above the fit), or restrict themselves to a carefully selected set of so-called continuum pixels. The set of continuum pixels is only valid for stars of a similar spectral type and metallicity, and in many cases there are \emph{no continuum pixels} (e.g., M-dwarfs).\\
 
+Classical spectroscopists might estimate some coarse continuum for the spectrum (or for each order, in the case of high-resolution echelle spectra), and then refine the continuum for every measured absorption line. This process is still often done by hand (albeit they are often experienced hands). Industrial spectroscopists might simply aim for a \emph{consistent} continuum normalization procedure, even if the process only estimates a pseudo-continuum for comparison, and not the true continuum. In an ideal scenario the pseudo-continuum is fit jointly with the stellar parameters, but this is often considered too expensive.\\
 
-- For some stars there is NO continuum (e.g., M-dwarfs). 
-
-- Cite cases of NMF use in astronomy (not that many)
-
+In Section~\ref{sec:methods} we describe a family of methods to address this problem. Each variant makes use of non-negative matrix factorization (NMF) to approximate line absorption. NMF is a linear model to describe large non-negative matrix by two smaller matrices, both with non-negative elements. This non-negativity provides a very useful constraint that is applicable in many areas of astronomy (i.e., where things cannot physically be negative), but NMF has seen relatively little use in astronomy compared to other research areas, or other dimensionality reduction techniques. The three variants of our method are each conceptually introduced, with the intended application (Section~\ref{sec:results}) to low-resolution optical spectra from the \emph{Sloan Digital Sky Survey}. We discuss limitations and potential extensions of our work in Section~\ref{sec:discussion}, before concluding in Section~\ref{sec:conclusions}.\\
 
 \section{Methods}\label{sec:methods}
 
@@ -157,7 +155,7 @@ The factorization of $\vecH$ is reasonably fast and easy to compute given existi
 \end{align}
 where $\vecpsi \in [0, \infty)$ are a row vector of $C$ \emph{basis weights}. $\vecpsi$ is analogous to a single row in $\vecW$: it represents the $C$ weights needed to reconstruct the stellar absorption from the $C$ basis vectors in $\vecH$. Note that because $\vecpsi$ and $\vecH$ are both restricted to have non-negative elements, Equation~\ref{eq:f} shows that the maximum value that can be predicted by $f(...)$ is 1. This restricts the flexibility of $f(...)$ to only be able to model continuum-normalized flux values, leaving $g(...)$ to represent the joint continuum-instrument response. While negative continuum-normalized flux values are allowed by Equation~\ref{eq:f} (i.e., $\vecpsi\vecH > 1$), this would be readily compensated by a negative continuum model $g(...) < 0$ and in practice such local minima are not favoured.\\
 
-There are many suitable choices for the continuum-instrument response model $g(\lambda_i;\vectheta)$. Here we chose a sine-and-cosine basis because it is a linear representation, and is sufficiently flexible for modelling the joint continuum-instrument response across a variety of spectrographs. The component $g(\lambda_i;\vectheta)$ is expressed as compactly as
+There are many suitable choices for the continuum-instrument response model $g(\lambda_i;\vectheta)$. Here we chose a sine-and-cosine basis because it is a linear representation, and is sufficiently flexible for modelling the joint continuum-instrument response across a variety of spectrographs. The component $g(\lambda_i;\vectheta)$ is expressed compactly as
 \begin{align}
     g(\lambda_i;\vectheta) = \vec{A}(\lambda_i)\vectheta
 \end{align}
@@ -181,9 +179,9 @@ where $\vec{A}(\lambda_i)$ returns a design matrix where the elements of the $j$
 
 This variant uses a set of theoretical spectra to factorize line absorption $\vecX$. With no flux errors on theoretical spectra, this factorization can be completed quickly using the coordinate descent algorithm (the data-driven variant uses multiplicative updates, which is slower). In this variant, there are no requirements on the number of dimensions (e.g., whether or not to include $[\alpha/\mathrm{Fe}]$, $[\mathrm{C/Fe}]$), and no strict requirements (see Section~\ref{sec:discussion}) on spacing in between points. The only implicit requirement is that the theoretical spectra should approximately span the range of stars that you intend to apply the method. This is more of a recommendation than a requirement: in practice we found that a grid trained on theoretical spectra of OBA-type stars was also sufficiently flexible to model many (but not all) white dwarf spectra. For these reasons, we chose to include as many theoretical spectra as our memory constraints would allow.\footnote{If the number of spectra exceeds your memory constraints then there are numerous strategies available: you can use memory-mapped arrays, use lower precision float types, or simply skip every $n$th theoretical spectrum.}\\
 
-- describe BOSS spectrograph characteristics, MWM + BHM
+The fifth generation of the \emph{Sloan Digital Sky Survey}  is acquiring low-resolution ($\mathcal{R} \sim 4{,}000$) optical spectra for millions of Milky Way stars using the \boss\ spectrograph at Apache Point Observatory (APO) and Las Campanas Observatory (LCO). Although the highest priority targets observed by \boss\ tend to be Black Hole Mapper (BHM) targets, many Milky Way stars are included per field, either because they are specifically targeted as part of a Milky Way Mapper (MWM) `carton'\footnote{`Cartons' are how targets are now assigned in SDSS.}, or because they are standard stars. We took all \boss\ spectra where the source was allocated to a Milky Way Mapper carton, or spectra where the source was allocated to a stellar-like carton. \todo{Some description of stellar-like.}\\
 
-- BOSZ spectra convolved and resampled 
+We used the BOSZ spectral grid to construct basis vectors for a line absorption model for \boss\ spectra. This is a high-resolution ($\mathcal{R} \sim 300{,}000$) finely sampled theoretical grid that spans a sufficiently large range in stellar parameters. We convolved the spectra to the nominal mean resolving power of the \boss\ spectrograph ($\mathcal{R} \sim 4{,}000$) and resampled it to the same pixels that the \boss\ spectra are resampled to: a uniform-in-log wavelength sampling from approximately 360\,nm until about 1000\,nm. We clipped any BOSZ flux values with emission lines exceeding normalized flux values of 1, as they would violate our NMF requirements. As we discuss in later sections, any emission lines are sufficiently rare in stellar spectra that they do not contribute significantly to the $\chi^2$ at inference time.\\
 
 - initially ignore the grid stellar parameters 
 
@@ -237,58 +235,30 @@ This variant works well if you have only one spectrum, or if you have many. If y
 \subsection{Hybrid approach: Line absorption is factorized by theoretical spectra, and iteratively improved by data}
 \label{sec:hybrid-method}
 
-The last variant we present in this paper is a hybrid of the two previous methods. The model-driven approach has the benefit that the basis weights and basis vectors can have physical interpretations. For example, a basis vector containing only strong, broad hydrogen lines would imply that any observed spectrum with a large basis weight for that vector might be a hot star. However, limitations in the theoretical model grid become readily apparent when using only a model-driven approach. While the data-driven approach naturally provides an excellent description of the data, it is less interpretable. This variant combines the benefits of both scenarios. 
+The last variant we present in this paper is a hybrid of the two previous methods. The model-driven approach has the benefit that the basis weights and basis vectors can have physical interpretations. For example, a basis vector containing only strong, broad hydrogen lines would imply that any observed spectrum with a large basis weight for that vector might be a hot star. However, limitations in the theoretical model grid become readily apparent when using only a model-driven approach: there are entire molecular bands that are not represented in the theoretical model spectra. And while the data-driven approach naturally provides an excellent description of the data, it is less interpretable. This hybrid variant combines the benefits of both scenarios. \\
 
-While the iterative steps in Section~\ref{sec:data-method} are each convex linear operations, the actual factorization of $\vec{X} = \vec{WH}$ is not convex: there are many combinations of $\vecW$ and $\vecH$ that produce the same result. For this reason, the solution of $\vecW$ and $\vecH$ depends on the initial starting point. Normally this is not a problem because we don't necessarily care \emph{which} solution we have to the factorization, but we do care if we want to gain physical insight from the basis weights $\vecW$ or basis vectors $\vecH$.
+While the iterative steps in Section~\ref{sec:data-method} are each convex linear operations, the actual factorization of $\vec{X} = \vec{WH}$ is not convex: there are many combinations of $\vecW$ and $\vecH$ that produce the same result. For this reason, the solution of $\vecW$ and $\vecH$ depends on the initial starting point. Normally this is not a problem because we don't necessarily care \emph{which} solution we have to the factorization, but we do care if we want to gain physical insight from the basis weights $\vecW$ or basis vectors $\vecH$.\\
 
-In this variant we use a theoretical grid and compute the basis vectors $\vecH$ just as described in Section~\ref{sec:model-method}.
+In this variant we use a theoretical grid and compute the basis vectors $\vecH$ just as described in Section~\ref{sec:model-method}. We then take $N >> C$ observed spectra and fit the basis weights $\vecpsi$ and continuum coefficients $\vectheta$ for each spectrum, keeping $\vecH$ fixed. At this point the variant is exactly the same as the model-driven method. Now we start iterating between the steps described in Section~\ref{sec:data-method}, starting from Step 2: we update the basis vectors $\vecH$ given the current estimate of the continuum coefficients $\vectheta$ and the basis weights $\vecW$. Next we proceed to Step 3, where we update the basis weights $\vecW$ given the current estimate of the continuum coefficients $\vectheta$ and the basis vectors $\vecH$. We continue cycling through Steps 1-3 a pre-determined number of times or until a tolerance in $\chi^2$ is reached.\\
 
-The line absorption model $f(\lambda_i;\vecpsi)$ can be easily constructed from a grid of theoretical continuum-normalized spectra. 
-%In later sub-sections we discuss the specific choices made for the \emph{APOGEE} and \emph{BOSS} applications, but for now we discuss some general principles and practices that we found successful. 
-The objective function to minimize
+In the applications we present here, this variant only tends to adjust \emph{some} of the basis vectors $\vecH$ (and corresponding weights $\vecW$). For example, absorption features that were poorly modelled in the theoretical grid quickly appear in the updated basis vectors in order to better match the data. Overall, most basis vectors do not change considerably, which keeps the basis weights and basis vectors (somewhat) interpretable. This step can be altered to only update specific vectors (e.g., those that look like molecular absorption, if molecular absorption is poorly modelled by theory), or specific wavelengths, but this experimentation is outside the scope of this work.
 
+\section{Results}
+\label{sec:results}
 
+We applied the three variants to all \boss\ stellar spectra currently available in the \emph{Sloan Digital Sky Survey}. This includes approximately \todo{X} spectra of \todo{Y} stars. 
 
-%Note that the stellar parameters used to compute the theoretical spectra are ignored when solving for $\vecW$ and $\vecH$ in Equation~\ref{eq:nmf}: only the spectra are used. There are correlations between the stellar parameters and the amplitudes $\vecW$, but as we discuss in Section~\ref{sec:discussion}, we avoid trying to use the amplitudes $\vecW$ (or $\vecpsi$) to interpreting stellar parameters.  
-
-
-%\subsection{Inference}
-
-
-
-\subsection{APOGEE spectra}
-\label{sec:apogee}
-
-The \apogee\ spectrograph spans approximately 1.5 to 1.7\,microns and has a resolving power of about 22,500 \citep{wilson}. There are three chips, which we chose to model as separate continuum regions (each with their own continuum coefficients $\vecpsi$). We used a 3rd order sine-and-cosine basis with length scale $L = 1300$, corresponding to 7 continuum coefficients per chip.\\
-
-We use the \todo{DR17 grids computed for FERRE, some in non-LTE}. The data are assumed to be resampled onto a rest-frame wavelength sampling that is uniform in log-spacing. We took the high-resolution theoretical grids and convolved them to a spectral resolution of 22,500 and sampled it to match the data. In total there are nearly \todo{1 M} spectra each with 8,575 pixels. This proved too large to fit in memory when computing the eigenspectra $\vecH$, forcing us to skip every 10th spectra.\\
-
-We chose to use 32 eigenspectra to construct the line absorption model, some of which are shown in Figure~\ref{fig:schematic}. During training, the hydrogen lines separate out immediately before other absorption features are recognizable. After training is complete, there are multiple eigenspectra that only have hydrogen lines: some narrow, and some broad. Eigenspectra with only recognizable patterns of molecular features are also present. The remaining eigenspectra have line absorption at many different wavelengths, representing something akin to overall metallicity. \\
-
-With these eigenspectra and continuum settings, we simultaneously fit line absorption and the joint continuum-instrument response for all \apogee\ spectra in SDSS-IV DR17 \citep{dr17} and \apogee\ spectra acquired by the Milky Way Mapper (MWM) in SDSS-V \citep{kollmeier}. In total there are \todo{X} \apogee\ spectra fit by this process: \todo{X} combined spectra and \todo{X} individual visits. We fit combined (co-added) spectra first, and for individual visit spectra we analytically computed the continuum coefficients $\vectheta$ for that visit, conditioned on the $\vecpsi$ found from the combined fit. In practice this implies that the combined and visit spectra for the same star share the same amplitudes $\vecpsi$ for computing rectified flux, but may have different continuum coefficients per visit. Figure~\ref{fig:example-apogee-spectra} show example \apogee\ rectified spectra for different spectral types. 
 
 \begin{figure}
-    \caption{Example rectified \apogee\ spectra (black) and best-fitting rectified line absorption (red) for different spectral types. \label{fig:example-apogee-spectra}}
+    \caption{Continuum-normalized \boss\ spectra of all spectral types, with the best-fitting model spectrum shown.}
 \end{figure}
 
 
-\subsection{Application to BOSS spectra}
-\label{sec:}
-
-SDSS-V is acquiring optical spectra for millions of Milky Way stars using the \boss\ 
-low-resolution ($\mathcal{R} \sim 4{,}000$) spectrograph at Apache Point Observatory (APO) and Las Campanas Observatory (LCO). Although the highest priority targets observed by \boss\ tend to be Black Hole Mapper (BHM) targets, many Milky Way stars are included per field, either because they are specifically targeted as part of a Milky Way Mapper carton\footnote{`Cartons' are how targets are assigned in SDSS-V.}, or because they are standard stars.\\
-
-We took all \boss\ spectra where the source was allocated to a Milky Way Mapper carton, or spectra where the source was allocated to a stellar-like carton. \todo{Some description of stellar-like.} For these spectra we fit the line absorption and joint continuum-instrument response.\\
-
-We used the BOSZ spectral grid to construct eigenspectra for a line absorption model for \boss\ spectra. This is a high-resolution ($\mathcal{R} \sim 300{,}000$) finely sampled theoretical grid that spans a sufficiently large range in stellar parameters. We convolved the spectra to the nominal mean resolving power of the \boss\ spectrograph ($\mathcal{R} \sim 4{,}000$) and resampled it to the same pixels that the \boss\ spectra are resampled to: a uniform-in-log wavelength sampling from approximately 360\,nm until \todo{1000\,nm}. We clipped any BOSZ flux values with emission lines exceeding normalized flux values of 1, as they would violate our NMF requirements. As we discuss in later sections, any emission lines are sufficiently rare in stellar spectra that they do not contribute significantly to the $\chi^2$ at inference time.\\
-
-%We used all \todo{X} BOSZ spectra to construct a line absorption matrix $\vecX$ and find the approximating matrices $\vecW$ and $\vecH$. For fitting \boss\ spectra, we separated the continuum fits into two chunks to represent the blue and red chip of the detector. Most of the time the blue and red chips are correctly merged together to produce a seamless contiguous spectrum from \todo{300\,nm to 1000,\nm}, but we noticed there could some times be jumps in the spectrum due to an imperfect merge. For these reasons, we used two sections from \todo{3750\,\AA\ to 6000\,\AA and 6050\,\AA to 10000\,\AA}. We chose a \todo{3rd} order sines-and-cosines basis with a length scale $L = X$\,\AA. Following what we did with \apogee\ spectra, we fit the combined \boss\ spectrum first for a given star, and then analytically computed $\vectheta{}|\vecpsi$: the continuum coefficients $\vectheta$ for the given visit, conditioned on the amplitudes optimized from the combined spectrum $\vecpsi$.
-
-\section{Results}\label{sec:results}
 
 \begin{figure}
     \caption{A Gaia H-R diagram showing the median $\chi^2$ per bin.}
 \end{figure}
+
 
 \begin{figure}
     \caption{Median observed rectified flux values as a function of S/N ratio showing that there is no bias as a function of S/N ratio.}
@@ -323,19 +293,20 @@ We used the BOSZ spectral grid to construct eigenspectra for a line absorption m
 
 - $\chi^2$ across the HRD
 
-- excellent way to identify regions where models and observations may disagree
+- excellent way to identify regions where models and observations totally disagree
 
 - orthogonality of the two model components
 
 - issue with M-giant eigenspectra when they were over-represented in the sample
 
 
-\section{Conclusions}\label{sec:conclusions}
+\section{Conclusions}
+\label{sec:conclusions}
 
 We solved continuum normalization.
 
 
-Code is available at \url{https://github.com/andycasey/continuum} and is registered in the Python Package Index as \texttt{stellar-continuum}. 
+\noindent{}We provide a Python implementation of our method in the following repository: \url{https://github.com/andycasey/continuum}. 
 
 \paragraph{Software}
 \texttt{numpy} \citep{numpy} ---
@@ -344,7 +315,7 @@ Code is available at \url{https://github.com/andycasey/continuum} and is registe
 
 \paragraph{Acknowledgements}
 It is a pleasure to thank
-% All these people are possible co-authors
+% All these people are likely co-authors, but should be thanked if they don't want to be co-authors
     Adam Wheeler (Ohio State University),
     Andrew Saydjari (Harvard),
     David W. Hogg (New York University),
