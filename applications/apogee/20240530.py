@@ -22,7 +22,7 @@ class Clam:
         W,
         label_names,
         grid_points,
-        deg=3,
+        modes=7,
         regions=(
             (15161.84316643 - 35, 15757.66995776 + 60),
             (15877.64179911 - 25, 16380.98452330 + 60),
@@ -30,101 +30,254 @@ class Clam:
         ),
         **kwargs
     ):
-        self.λ = λ
-        self.H = H
+        """
+        A constrained linear absorption model.
+        
+        :param λ:
+            The wavelength grid. This should be a `P`-length array.
+            
+        :param H:
+            The components of the non-negative matrix factorization of the absorption.
+            This should be a `(C, P)` shaped array, where `C` is the number of components.
+        
+        :param W:
+            The weights of the components. This should be a `(*N, C)` shape array, where `N` is the
+            shape of the grid points.
+        
+        :param label_names:
+            The names of the stellar parameters.
+        
+        :param grid_points:
+            The grid points of the stellar parameters. This should be a `L`-length list of arrays,
+            where `L` is the number of stellar parameters. Each list should be ordered.
+        
+        :param modes: [optional]
+            The number of Fourier modes to use to model the continuum (in each region).
+        """
+        if modes % 2 == 0:
+            raise ValueError("modes must be an odd number")
+        
+        self._λ = λ
+        self._H = H
         if W.ndim == 2:
             W = W.reshape((*tuple(map(len, grid_points)), -1))
-        self.W = W        
-        self.grid_points = grid_points
-        self.label_names = label_names
-        self.grid_min = np.array(list(map(np.min, grid_points)))
-        self.grid_ptp = np.array(list(map(np.ptp, grid_points)))
+        self._W = W        
+        self._grid_points = grid_points
+        self._label_names = tuple(label_names)
         
-        self.interpolator = RegularGridInterpolator(
+        self._interpolator = RegularGridInterpolator(
             tuple([(g - self.grid_min[i]) / self.grid_ptp[i] for i, g in enumerate(grid_points)]),
-            self.W,
+            W,
             bounds_error=False,
             fill_value=0
         )
 
-        self.regions = regions or [tuple(λ[[0, -1]])]
+        regions = regions or [tuple(λ[[0, -1]])]
                         
-        # Construct design matrix.
-        n_parameters_per_region = 2 * deg + 1
-        self.continuum_design_matrix = np.zeros(
-            (self.λ.size, len(self.regions) * n_parameters_per_region), 
-            dtype=float
-        )
-        for i, region_slice in enumerate(region_slices(self.λ, self.regions)):
-            si = i * n_parameters_per_region
-            ei = (i + 1) * n_parameters_per_region
-            self.continuum_design_matrix[region_slice, si:ei] = design_matrix(λ[region_slice], deg)
+        # Construct design matrix.        
+        self._continuum_design_matrix = np.zeros((λ.size, len(regions) * modes), dtype=float)
+        for i, region_slice in enumerate(region_slices(λ, regions)):
+            self._continuum_design_matrix[region_slice, i*modes:(i+1)*modes] = design_matrix(λ[region_slice], modes)
             
-        self.n_labels = len(self.label_names)
-        '''
-        def f(θ):
-            W = self.interpolator(θ[:L])
-            return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[L:])
-        
-        self.g = jax.jacfwd(f)
-        '''
         return None
     
+    # Using Strategy 2 of https://jax.readthedocs.io/en/latest/faq.html#how-to-use-jit-with-methods
+    # But hashing is expensive, so we will just never mutate the object. That's why we have a bunch of read-only attributes.
+    
+    @property
+    def λ(self):
+        """The wavelength grid."""
+        return self._λ
+    
+    @property
+    def H(self):
+        """The components of the non-negative matrix factorization of the absorption."""
+        return self._H
+    
+    @property
+    def W(self):
+        """The weights of the non-negative matrix factorization components."""
+        return self._W
+    
+    @property
+    def grid_points(self):
+        """The grid points of the stellar parameters."""
+        return self._grid_points
+    
+    @property
+    def label_names(self):
+        """The names of the stellar parameters."""
+        return self._label_names
+    
+    @cached_property
+    def grid_min(self):
+        """The minimum values of the grid points."""
+        return np.array(list(map(np.min, self.grid_points)))
+    
+    @cached_property
+    def grid_ptp(self):
+        """The peak-to-peak values of the grid points."""
+        return np.array(list(map(np.ptp, self.grid_points)))
+    
+    @property
+    def interpolator(self):
+        """The interpolator for the weights of the non-negative matrix factorization components."""
+        return self._interpolator
+
+    @property
+    def continuum_design_matrix(self):
+        """The design matrix for the continuum."""
+        return self._continuum_design_matrix
+    
+    @cached_property
+    def n_labels(self):
+        """The number of stellar parameter labels."""
+        return len(self.label_names)
+    
+    # TODO: Computing the hash is too expensive. We should just never mutate the object.
+    # Note: If you ever experience weirdness,.. this is the place to start debugging.
+    def __hash__(self):
+        return id(self)
+        
     @partial(jax.jit, static_argnums=(0,))
     def __call__(self, θ: Sequence[float]):
-        print("compiling")
+        """
+        Predict the flux given the stellar parameters and the continuum parameters.
+        
+        :param θ: 
+            The model parameters. This should be a `N`-length sequence where the first `L` elements
+            are the scaled stellar parameters (i.e., between 0 and 1), and the next `C` elements
+            are the continuum parameters. If rotational broadening is being fit, then this is the
+            last element of sequence. 
+            
+            You can check the values of `L` (number of stellar parameter labels) using the 
+            `n_labels` attribute, and you can check the number of continuum parameters using the 
+            `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
+            `P` is the number of pixels.
+        """
         W = self.interpolator(θ[:self.n_labels])
         return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
-    
 
 
-    def scale_stellar_parameters(self, p):
-        return (p - self.grid_min) / self.grid_ptp
+    @partial(jax.jit, static_argnums=(0,))
+    def jacobian(self, θ: Sequence[float]):
+        """
+        Compute the Jacobian of the predicted model with respect to the model parameters.
+        
+        :param θ: 
+            The model parameters. This should be a `N`-length sequence where the first `L` elements
+            are the scaled stellar parameters (i.e., between 0 and 1), and the next `C` elements
+            are the continuum parameters. If rotational broadening is being fit, then this is the
+            last element of sequence. 
+            
+            You can check the values of `L` (number of stellar parameter labels) using the 
+            `n_labels` attribute, and you can check the number of continuum parameters using the 
+            `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
+            `P` is the number of pixels.
+        """
+        return jax.jacfwd(self.__call__)(θ)
     
-    def unscale_stellar_parameters(self, p):
-        return p * self.grid_ptp + self.grid_min
     
     @cached_property
     def bounds(self):
+        """Bounds on the model parameters."""
         bounds = [(0, 1)] * len(self.label_names)
         bounds += [(-np.inf, +np.inf)] * self.continuum_design_matrix.shape[1]
         return np.array(bounds).T
 
-    
-    def get_initial_guess(self, flux, ivar, max_iter=10, large=1e10):
 
+    def scale_stellar_parameters(self, p):
+        """Scale the stellar parameters to the range [0, 1] for the interpolator."""
+        return (p - self.grid_min) / self.grid_ptp
+    
+    
+    def unscale_stellar_parameters(self, p):
+        """Unscale the stellar parameters from the range [0, 1] for the interpolator."""
+        return p * self.grid_ptp + self.grid_min
+        
+        
+    def zero_absorption_initial_guess(self, flux, ivar):
+        """
+        Return an initial guess of the model parameters assuming zero absorption.
+        
+        The continuum parameters are set to zero, and the stellar parameters are set 
+        to the mid-point in each dimension.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.     
+        
+        :returns:
+            The initial guess of the model parameters.  
+        """
+        A = self.continuum_design_matrix
+        ATCinv = A.T * ivar
+        return np.hstack([
+            0.5 * np.zeros(self.n_labels),
+            np.linalg.solve(ATCinv @ A, ATCinv @ flux)
+        ])
+    
+    def initial_guess(self, flux: Sequence[float], ivar: Sequence[float], max_iter=10, large=1e10, full_output=False):
+        """
+        Step through the grid of stellar parameters to find a good initial guess.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.
+        
+        :param max_iter: [optional]
+            The maximum number of iterations to take.
+        
+        :param large: [optional]
+            A large number to initialize the chi-squared values.
+        
+        :param full_output: [optional]
+            Return a two-length tuple containing the initial guess and a dictionary of metadata.
+        
+        :returns:
+            The initial guess of the model parameters. If `full_output` is true, then an
+            additional dictionary of metadata is returned.
+        """
         A = self.continuum_design_matrix
         
         ATCinv = A.T * ivar
         lu, piv = lu_factor(ATCinv @ A)
 
-        full_shape = self.W.shape[:-1]         # The -1 is for the number of components.        
+        full_shape = self.W.shape[:-1] # The -1 is for the number of components.        
+        rta_indices = tuple(map(np.arange, full_shape))
         
-        x0 = np.empty((*full_shape, A.shape[1]))
+        x = np.empty((*full_shape, A.shape[1]))
         chi2 = large * np.ones(full_shape)
+        n_evaluations = 0
 
         # Even though this does not get us to the final edge point in some parameters,
         # NumPy slicing creates a *view* instead of a copy, so it is more efficient.        
         current_step = (np.array(full_shape) - 1) // 2
         current_slice = tuple(slice(0, 1 + end, step) for end, step in zip(full_shape, current_step))
                 
-        for iter in range(max_iter):                        
+        for n_iter in range(1, 1 + max_iter):      
             W_slice = self.W[current_slice]
             
             rectified = (1 - W_slice @ H).reshape((-1, self.λ.size))
             
-            rta = [np.arange(s)[ss] for s, ss in zip(full_shape, current_slice)]
+            # map relative indices to absolute ones
+            rta = [rtai[ss] for rtai, ss in zip(rta_indices, current_slice)]
             
             shape = W_slice.shape[:-1]
             for i, r in enumerate(rectified):
                 uri = np.unravel_index(i, shape)
-                uai = tuple([rta[j][_] for j, _ in enumerate(uri)])
+                uai = tuple(rta[j][_] for j, _ in enumerate(uri))
                 if chi2[uai] < large:
+                    # We have computed this solution already.
                     continue
-                x0[uai] = lu_solve((lu, piv), ATCinv @ (flux / r))
-                chi2[uai] = np.sum((r * (A @ x0[uai]) - flux)**2 * ivar)
-                
-            
+                x[uai] = lu_solve((lu, piv), ATCinv @ (flux / r))
+                chi2[uai] = np.sum((r * (A @ x[uai]) - flux)**2 * ivar)
+                n_evaluations += 1
+                            
             # Get next slice
             relative_index = np.unravel_index(np.argmin(chi2[current_slice]), shape)
             absolute_index = tuple([rta[j][_] for j, _ in enumerate(relative_index)])
@@ -136,38 +289,58 @@ class Clam:
                 break
             
             current_step, current_slice = (next_step, next_slice)
-
         else:
             warnings.warn(f"Maximum iterations reached ({max_iter}) for initial guess")
+
+        p0 = np.hstack([
+            self.scale_stellar_parameters([p[i] for p, i in zip(self.grid_points, absolute_index)]),
+            x[absolute_index]
+        ])
+        if not full_output:
+            return p0
         
-        stellar_parameters = tuple(p[i] for p, i in zip(self.grid_points, absolute_index))
+        meta = dict(
+            x=x,
+            chi2=chi2,
+            n_iter=n_iter,
+            n_evaluations=n_evaluations, 
+            min_chi2=chi2[absolute_index],
+        )
+        return (p0, meta)
 
-        return (stellar_parameters, x0[absolute_index], chi2[absolute_index])
-    
 
-
-    
     def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None):
+        """
+        Fit the model to the data.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.
+        
+        :param p0: [optional]
+            The initial guess for the model parameters.
+        
+        :returns:
+            A four-length tuple containing the best-fit model parameters, the covariance matrix
+            of the best-fit parameters, the model flux, and the reduced chi-squared value.
+        """
             
         if p0 is None:
-            stellar_parameters, continuum_parameters, chi2 = self.get_initial_guess(flux, ivar)
-            p0 = np.hstack([
-                self.scale_stellar_parameters(stellar_parameters), 
-                continuum_parameters
-            ])
-
-        g = jax.jacfwd(self)
+            p0 = self.initial_guess(flux, ivar)            
         
         θ, Σ = op.curve_fit(
             lambda _, *p: self(np.array(p)),
-            self.λ,
+            None,
             flux,
             p0=p0,
-            jac=lambda _, *p: g(np.array(p)),
+            jac=lambda _, *p: self.jacobian(np.array(p)),
             sigma=ivar_to_sigma(ivar),
             bounds=self.bounds,
-        )
-    
+            check_finite=False,
+            absolute_sigma=True            
+        )    
         y = self(θ)
         n_pixels = np.sum(ivar > 0)
         rchi2 = np.sum((flux - y)**2 * ivar) / (n_pixels - len(θ) - 1)
@@ -181,15 +354,38 @@ class Clam:
         return (θ, Σ, y, rchi2)
     
 
-def ivar_to_sigma(ivar):
+def ivar_to_sigma(ivar: Sequence[float]) -> Sequence[float]:
+    """
+    Convert the inverse variance to standard deviation.
+    
+    :param ivar:
+        The inverse variance.
+    
+    :returns:
+        The standard deviation.
+    """
     with np.errstate(divide='ignore'):
         sigma = ivar**-0.5
         sigma[~np.isfinite(sigma)] = LARGE
         return sigma
     
     
-
-def get_next_slice(index, step, shape):    
+def get_next_slice(index: Sequence[float], step: Sequence[float], shape: Sequence[float]):
+    """
+    Get the next slice given the current position, step, and dimension shapes.
+    
+    :param index:
+        The best current index.
+    
+    :param step:
+        The step size in each dimension.
+    
+    :param shape:
+        The shape of the grid.
+    
+    :returns:
+        A tuple of slices for the next iteration.
+    """
     next_slice = []
     for center, step, end in zip(index, step, shape):
         start = center - step
@@ -205,7 +401,6 @@ def get_next_slice(index, step, shape):
         next_slice.append(slice(start, stop, step))
     return tuple(next_slice)
 
-
     
 def region_slices(λ, regions):
     slices = []
@@ -214,19 +409,21 @@ def region_slices(λ, regions):
         slices.append(slice(si, ei + 1))
     return slices    
 
-def design_matrix(dispersion: np.array, deg: int) -> np.array:
+
+def design_matrix(λ: np.array, modes: int) -> np.array:
     #L = 1300.0
-    #scale = 2 * (np.pi / (2 * np.ptp(dispersion)))
-    scale = np.pi / np.ptp(dispersion)
+    #scale = 2 * (np.pi / (2 * np.ptp(λ)))
+    deg = (modes - 1) // 2
+    scale = np.pi / np.ptp(λ)
     return np.vstack(
         [
-            np.ones_like(dispersion).reshape((1, -1)),
+            np.ones_like(λ).reshape((1, -1)),
             np.array(
                 [
-                    [np.cos(o * scale * dispersion), np.sin(o * scale * dispersion)]
+                    [np.cos(o * scale * λ), np.sin(o * scale * λ)]
                     for o in range(1, deg + 1)
                 ]
-            ).reshape((2 * deg, dispersion.size)),
+            ).reshape((2 * deg, λ.size)),
         ]
     ).T
 
@@ -341,7 +538,7 @@ if __name__ == "__main__":
             m67.append((index, item))
 
     results = []
-    for index, item in tqdm(m67[:10]):        
+    for index, item in tqdm(m67[:100]):        
         θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index])
         
         result = dict(zip(model.label_names, θ))
