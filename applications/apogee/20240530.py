@@ -1,19 +1,19 @@
 
 import numpy as np
 import jax
-#import jax.numpy as np
-from functools import partial
+from functools import partial, cached_property
 from scipy.linalg import lu_factor, lu_solve
 from typing import Sequence, Optional
-from functools import cached_property
 import warnings
-from tqdm import tqdm
 
+# TODO: move furniture around
+from interpolate import RegularGridInterpolator
+#from jax_ndimage import gaussian_filter1d
+import jax.numpy as jnp
 
 LARGE = 1e10
-SMALL = 1/LARGE
 
-class Clam:
+class BaseClam:
 
     def __init__(
         self,
@@ -65,8 +65,11 @@ class Clam:
         self._grid_points = grid_points
         self._label_names = tuple(label_names)
         
+        self._grid_min = np.array(list(map(np.min, self.grid_points)))
+        self._grid_ptp = np.array(list(map(np.ptp, self.grid_points)))
+        
         self._interpolator = RegularGridInterpolator(
-            tuple([(g - self.grid_min[i]) / self.grid_ptp[i] for i, g in enumerate(grid_points)]),
+            tuple([(g - self._grid_min[i]) / self._grid_ptp[i] for i, g in enumerate(grid_points)]),
             W,
             bounds_error=False,
             fill_value=0
@@ -79,6 +82,7 @@ class Clam:
         for i, region_slice in enumerate(region_slices(λ, regions)):
             self._continuum_design_matrix[region_slice, i*modes:(i+1)*modes] = design_matrix(λ[region_slice], modes)
             
+        self._n_labels = len(self.label_names)        
         return None
     
     # Using Strategy 2 of https://jax.readthedocs.io/en/latest/faq.html#how-to-use-jit-with-methods
@@ -109,15 +113,15 @@ class Clam:
         """The names of the stellar parameters."""
         return self._label_names
     
-    @cached_property
+    @property
     def grid_min(self):
         """The minimum values of the grid points."""
-        return np.array(list(map(np.min, self.grid_points)))
+        return self._grid_min
     
-    @cached_property
+    @property
     def grid_ptp(self):
         """The peak-to-peak values of the grid points."""
-        return np.array(list(map(np.ptp, self.grid_points)))
+        return self._grid_ptp
     
     @property
     def interpolator(self):
@@ -129,35 +133,27 @@ class Clam:
         """The design matrix for the continuum."""
         return self._continuum_design_matrix
     
-    @cached_property
+    @property
+    def bounds(self):
+        """Bounds on the model parameters."""
+        return self._bounds
+    
+    @property
     def n_labels(self):
         """The number of stellar parameter labels."""
-        return len(self.label_names)
+        return self._n_labels  
+    
+    @cached_property
+    def bounds(self):
+        """Bounds on the model parameters."""
+        bounds = [(0, 1)] * self._n_labels
+        bounds += [(-np.inf, +np.inf)] * self.continuum_design_matrix.shape[1]
+        return np.array(bounds).T          
     
     # TODO: Computing the hash is too expensive. We should just never mutate the object.
     # Note: If you ever experience weirdness,.. this is the place to start debugging.
     def __hash__(self):
-        return id(self)
-        
-    @partial(jax.jit, static_argnums=(0,))
-    def __call__(self, θ: Sequence[float]):
-        """
-        Predict the flux given the stellar parameters and the continuum parameters.
-        
-        :param θ: 
-            The model parameters. This should be a `N`-length sequence where the first `L` elements
-            are the scaled stellar parameters (i.e., between 0 and 1), and the next `C` elements
-            are the continuum parameters. If rotational broadening is being fit, then this is the
-            last element of sequence. 
-            
-            You can check the values of `L` (number of stellar parameter labels) using the 
-            `n_labels` attribute, and you can check the number of continuum parameters using the 
-            `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
-            `P` is the number of pixels.
-        """
-        W = self.interpolator(θ[:self.n_labels])
-        return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
-
+        return id(self)    
 
     @partial(jax.jit, static_argnums=(0,))
     def jacobian(self, θ: Sequence[float]):
@@ -178,25 +174,17 @@ class Clam:
         return jax.jacfwd(self.__call__)(θ)
     
     
-    @cached_property
-    def bounds(self):
-        """Bounds on the model parameters."""
-        bounds = [(0, 1)] * len(self.label_names)
-        bounds += [(-np.inf, +np.inf)] * self.continuum_design_matrix.shape[1]
-        return np.array(bounds).T
-
-
-    def scale_stellar_parameters(self, p):
+    def scale_stellar_parameters(self, stellar_parameters: Sequence[float]) -> Sequence[float]:
         """Scale the stellar parameters to the range [0, 1] for the interpolator."""
-        return (p - self.grid_min) / self.grid_ptp
+        return (stellar_parameters - self.grid_min) / self.grid_ptp
     
     
-    def unscale_stellar_parameters(self, p):
+    def unscale_stellar_parameters(self, scaled_stellar_parameters: Sequence[float]) -> Sequence[float]:
         """Unscale the stellar parameters from the range [0, 1] for the interpolator."""
-        return p * self.grid_ptp + self.grid_min
+        return scaled_stellar_parameters * self.grid_ptp + self.grid_min
         
         
-    def zero_absorption_initial_guess(self, flux, ivar):
+    def zero_absorption_initial_guess(self, flux: Sequence[float], ivar: Sequence[float]) -> Sequence[float]:
         """
         Return an initial guess of the model parameters assuming zero absorption.
         
@@ -219,7 +207,14 @@ class Clam:
             np.linalg.solve(ATCinv @ A, ATCinv @ flux)
         ])
     
-    def initial_guess(self, flux: Sequence[float], ivar: Sequence[float], max_iter=10, large=1e10, full_output=False):
+    
+    def initial_guess(
+        self,
+        flux: Sequence[float],
+        ivar: Sequence[float],
+        max_iter: Optional[int] = 10,
+        full_output: Optional[bool] = False
+    ) -> Sequence[float]:
         """
         Step through the grid of stellar parameters to find a good initial guess.
         
@@ -231,10 +226,7 @@ class Clam:
         
         :param max_iter: [optional]
             The maximum number of iterations to take.
-        
-        :param large: [optional]
-            A large number to initialize the chi-squared values.
-        
+                
         :param full_output: [optional]
             Return a two-length tuple containing the initial guess and a dictionary of metadata.
         
@@ -251,7 +243,7 @@ class Clam:
         rta_indices = tuple(map(np.arange, full_shape))
         
         x = np.empty((*full_shape, A.shape[1]))
-        chi2 = large * np.ones(full_shape)
+        chi2 = LARGE * np.ones(full_shape)
         n_evaluations = 0
 
         # Even though this does not get us to the final edge point in some parameters,
@@ -271,7 +263,7 @@ class Clam:
             for i, r in enumerate(rectified):
                 uri = np.unravel_index(i, shape)
                 uai = tuple(rta[j][_] for j, _ in enumerate(uri))
-                if chi2[uai] < large:
+                if chi2[uai] < LARGE:
                     # We have computed this solution already.
                     continue
                 x[uai] = lu_solve((lu, piv), ATCinv @ (flux / r))
@@ -305,11 +297,12 @@ class Clam:
             n_iter=n_iter,
             n_evaluations=n_evaluations, 
             min_chi2=chi2[absolute_index],
+            large=LARGE
         )
         return (p0, meta)
 
 
-    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None):
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, **kwargs):
         """
         Fit the model to the data.
         
@@ -323,12 +316,19 @@ class Clam:
             The initial guess for the model parameters.
         
         :returns:
-            A four-length tuple containing the best-fit model parameters, the covariance matrix
-            of the best-fit parameters, the model flux, and the reduced chi-squared value.
+            A five-length tuple containing:
+            - the best-fit stellar parameters,
+            - the best-fit model parameters (including unscaled stellar parameters), 
+            - the covariance matrix of the best-fit parameters, 
+            - the model flux, and 
+            - the reduced chi-squared value.
         """
             
         if p0 is None:
             p0 = self.initial_guess(flux, ivar)            
+        
+        kwds = dict(check_finite=False, absolute_sigma=True, bounds=self.bounds)
+        kwds.update(**kwargs)
         
         θ, Σ = op.curve_fit(
             lambda _, *p: self(np.array(p)),
@@ -337,21 +337,124 @@ class Clam:
             p0=p0,
             jac=lambda _, *p: self.jacobian(np.array(p)),
             sigma=ivar_to_sigma(ivar),
-            bounds=self.bounds,
-            check_finite=False,
-            absolute_sigma=True            
+            **kwds
         )    
         y = self(θ)
         n_pixels = np.sum(ivar > 0)
         rchi2 = np.sum((flux - y)**2 * ivar) / (n_pixels - len(θ) - 1)
         
-        # scale the θ and Σ for stellar params
-        L = len(self.label_names)
-        θ[:L] = self.unscale_stellar_parameters(θ[:L])
-        gp = np.atleast_2d(np.hstack([self.grid_ptp, np.ones(θ.size - L)]))
-        Σ *= gp.T @ gp
+        # scale the θ and Σ for stellar params?
+        stellar_parameters = self.unscale_stellar_parameters(θ[:self.n_labels])        
+        return (stellar_parameters, θ, Σ, y, rchi2)
+
+
+class Clam(BaseClam):
+    
+    """A constrained linear absorption model without rotational broadening."""
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def __call__(self, θ: Sequence[float]):
+        """
+        Predict the flux given the stellar parameters and the continuum parameters.
         
-        return (θ, Σ, y, rchi2)
+        :param θ: 
+            The model parameters. This should be a `N`-length sequence where the first `L` elements
+            are the scaled stellar parameters (i.e., between 0 and 1), and the next `C` elements
+            are the continuum parameters. If rotational broadening is being fit, then this is the
+            last element of sequence. 
+            
+            You can check the values of `L` (number of stellar parameter labels) using the 
+            `n_labels` attribute, and you can check the number of continuum parameters using the 
+            `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
+            `P` is the number of pixels.
+        """
+        W = self.interpolator(θ[:self.n_labels])
+        return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
+    
+    
+
+class RotationallyBroadenedClam(BaseClam):
+    
+    """A constrained linear absorption model with rotational broadening."""
+    
+    _initial_filter_sigma = 10.0
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def __call__(self, θ: Sequence[float]):
+        """
+        Predict the flux given the stellar parameters and the continuum parameters.
+        
+        :param θ: 
+            The model parameters. This should be a `N`-length sequence where the first `L` elements
+            are the scaled stellar parameters (i.e., between 0 and 1), and the next `C` elements
+            are the continuum parameters. If rotational broadening is being fit, then this is the
+            last element of sequence. 
+            
+            You can check the values of `L` (number of stellar parameter labels) using the 
+            `n_labels` attribute, and you can check the number of continuum parameters using the 
+            `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
+            `P` is the number of pixels.
+        """
+        W = self.interpolator(θ[:self.n_labels])
+        rectified_flux = jnp.convolve(1 - W @ self.H, jnp.array([θ[-1]]))
+        return rectified_flux * (self.continuum_design_matrix @ θ[self.n_labels:-1])
+        
+
+    @cached_property
+    def bounds(self):
+        """Bounds on the model parameters."""
+        return np.hstack([
+            super(RotationallyBroadenedClam, self).bounds, 
+            np.atleast_2d([0, np.inf]).T
+        ])
+        
+        
+    def zero_absorption_initial_guess(self, flux: Sequence[float], ivar: Sequence[float]) -> Sequence[float]:
+        """
+        Return an initial guess of the model parameters assuming zero absorption.
+        
+        The continuum parameters are set to zero, and the stellar parameters are set
+        to the mid-point in each dimension. The last parameter is the broaadening, which is initially set to 10.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.
+        """
+        x = super(RotationallyBroadenedClam, self).zero_absorption_initial_guess(flux, ivar)
+        return np.hstack([x, self._initial_filter_sigma])
+    
+    
+    def initial_guess(
+        self,
+        flux: Sequence[float],
+        ivar: Sequence[float],
+        max_iter: Optional[int] = 10,
+        full_output: Optional[bool] = False
+    ):
+        """
+        Step through the grid of stellar parameters to find a good initial guess.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.
+        
+        :param max_iter: [optional]
+            The maximum number of iterations to take.
+                
+        :param full_output: [optional]
+            Return a two-length tuple containing the initial guess and a dictionary of metadata.
+        
+        :returns:
+            The initial guess of the model parameters. If `full_output` is true, then an
+            additional dictionary of metadata is returned.
+        """        
+        x0, meta = super(RotationallyBroadenedClam, self).initial_guess(flux, ivar, max_iter=max_iter, full_output=True)
+        x0 = np.hstack([x0, self._initial_filter_sigma])
+        return (x0, meta) if full_output else x0
     
 
 def ivar_to_sigma(ivar: Sequence[float]) -> Sequence[float]:
@@ -520,7 +623,7 @@ if __name__ == "__main__":
         with open(NMF_PATH, "wb") as fp:
             pickle.dump((W, H, meta), fp)
     
-    model = Clam(
+    model = RotationallyBroadenedClam(
         λ=10**(4.179 + 6e-6 * np.arange(8575)),
         H=H,
         W=W,
@@ -539,12 +642,14 @@ if __name__ == "__main__":
 
     results = []
     for index, item in tqdm(m67[:100]):        
-        θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index])
+        stellar_parameters, θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index])
         
-        result = dict(zip(model.label_names, θ))
+        result = dict(zip(model.label_names, stellar_parameters))
+        result["vsini"] = θ[-1]
         result["rchi2"] = rchi2
         
-        results.append((result, item))
+        results.append(result)
+        #(result, item))
         
         """
         import matplotlib.pyplot as plt
@@ -556,6 +661,16 @@ if __name__ == "__main__":
         print(rchi2)        
         raise a
         """
+        
+    t = Table(rows=results)
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    scat = ax.scatter(t["Teff"], t["logg"], c=t["vsini"], s=5)
+    ax.set_xlim(ax.get_xlim()[::-1])
+    ax.set_ylim(ax.get_ylim()[::-1])
+    
+    cbar = plt.colorbar(scat)
+    
     raise a
     
     from astropy.table import Table
