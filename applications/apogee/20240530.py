@@ -1,10 +1,17 @@
 
 import numpy as np
-from scipy.interpolate import RegularGridInterpolator
+import jax
+#import jax.numpy as np
+
 from scipy.linalg import lu_factor, lu_solve
+from typing import Sequence, Optional
+from functools import cached_property
 import warnings
 from tqdm import tqdm
 
+
+LARGE = 1e10
+SMALL = 1/LARGE
 
 class Clam:
 
@@ -36,7 +43,6 @@ class Clam:
         self.interpolator = RegularGridInterpolator(
             tuple([(g - self.grid_min[i]) / self.grid_ptp[i] for i, g in enumerate(grid_points)]),
             self.W,
-            method="linear",
             bounds_error=False,
             fill_value=0
         )
@@ -46,29 +52,30 @@ class Clam:
         # Construct design matrix.
         n_parameters_per_region = 2 * deg + 1
         self.continuum_design_matrix = np.zeros(
-            (self.λ.size, self.n_regions * n_parameters_per_region), 
+            (self.λ.size, len(self.regions) * n_parameters_per_region), 
             dtype=float
         )
-        self.region_slices = region_slices(self.λ, self.regions)
-        for i, region_slice in enumerate(self.region_slices):
+        for i, region_slice in enumerate(region_slices(self.λ, self.regions)):
             si = i * n_parameters_per_region
             ei = (i + 1) * n_parameters_per_region
             self.continuum_design_matrix[region_slice, si:ei] = design_matrix(λ[region_slice], deg)
-        return None
-        
-        
-    def __call__(self, θ):
+            
         L = len(self.label_names)
-        W = self.interpolator(self.scale_stellar_parameters(θ[:L]))        
-        return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[L:])
-        
+        def f(θ):
+            W = self.interpolator(θ[:L])
+            return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[L:])
+                
+        self.f = f
+        self.g = jax.jacfwd(f)
+        return None
+
     def scale_stellar_parameters(self, p):
         return (p - self.grid_min) / self.grid_ptp
     
     def unscale_stellar_parameters(self, p):
         return p * self.grid_ptp + self.grid_min
     
-    @property
+    @cached_property
     def bounds(self):
         bounds = [(0, 1)] * len(self.label_names)
         bounds += [(-np.inf, +np.inf)] * self.continuum_design_matrix.shape[1]
@@ -107,7 +114,8 @@ class Clam:
                     continue
                 x0[uai] = lu_solve((lu, piv), ATCinv @ (flux / r))
                 chi2[uai] = np.sum((r * (A @ x0[uai]) - flux)**2 * ivar)
-                        
+                
+            
             # Get next slice
             relative_index = np.unravel_index(np.argmin(chi2[current_slice]), shape)
             absolute_index = tuple([rta[j][_] for j, _ in enumerate(relative_index)])
@@ -124,16 +132,61 @@ class Clam:
             warnings.warn(f"Maximum iterations reached ({max_iter}) for initial guess")
         
         stellar_parameters = tuple(p[i] for p, i in zip(self.grid_points, absolute_index))
-        
+
         return (stellar_parameters, x0[absolute_index], chi2[absolute_index])
     
-        
-        
+
+
     
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, use_jac=True, **kwargs):
+            
+        if p0 is None:
+            stellar_parameters, continuum_parameters, chi2 = self.get_initial_guess(flux, ivar)
+            p0 = np.hstack([
+                self.scale_stellar_parameters(stellar_parameters), 
+                continuum_parameters
+            ])
+        
+        if use_jac:
+
+            θ, Σ = op.curve_fit(
+                lambda _, *p: self.f(np.array(p)),
+                self.λ,
+                flux,
+                p0=p0,
+                jac=lambda _, *p: self.g(np.array(p)),
+                sigma=ivar_to_sigma(ivar),
+                bounds=self.bounds,
+            )
+        
+        else:
+            θ, Σ = op.curve_fit(
+                lambda _, *p: self.f(np.array(p)),
+                self.λ,
+                flux,
+                p0=p0,
+                sigma=ivar_to_sigma(ivar),
+                bounds=self.bounds,
+            )            
+        y = self.f(θ)
+        n_pixels = np.sum(ivar > 0)
+        rchi2 = np.sum((flux - y)**2 * ivar) / (n_pixels - len(θ) - 1)
+        
+        # scale the θ and Σ for stellar params
+        L = len(self.label_names)
+        θ[:L] = self.unscale_stellar_parameters(θ[:L])
+        gp = np.atleast_2d(np.hstack([self.grid_ptp, np.ones(θ.size - L)]))
+        Σ *= gp.T @ gp
+        
+        return (θ, Σ, y, rchi2)
     
-    @property
-    def n_regions(self):
-        return len(self.regions)
+
+def ivar_to_sigma(ivar):
+    with np.errstate(divide='ignore'):
+        sigma = ivar**-0.5
+        sigma[~np.isfinite(sigma)] = LARGE
+        return sigma
+    
     
 
 def get_next_slice(index, step, shape):    
@@ -156,7 +209,7 @@ def get_next_slice(index, step, shape):
     
 def region_slices(λ, regions):
     slices = []
-    for region in regions:
+    for region in np.array(regions):
         si, ei = λ.searchsorted(region)
         slices.append(slice(si, ei + 1))
     return slices    
@@ -183,13 +236,14 @@ if __name__ == "__main__":
     
     import os
     import h5py as h5
-    import numpy as np
     import pickle
     from sklearn.decomposition import NMF
-    from scipy.interpolate import RegularGridInterpolator
+
     from scipy import optimize as op
     from tqdm import tqdm
     from astropy.table import Table    
+        
+    from interpolate import RegularGridInterpolator
         
     NMF_PATH = "20240517_components.pkl"
     SLICE_ON_N_ONLY = False
@@ -234,7 +288,7 @@ if __name__ == "__main__":
         n_pixels = grid_model_flux.shape[-1]
         
         absorption = np.clip(1 - grid_model_flux, 0, 1).reshape((-1, n_pixels))
-        absorption[~np.isfinite(absorption)] = 0
+        #absorption[~np.isfinite(absorption)] = 0
         
     else:
         print("Using existing grid")
@@ -281,10 +335,40 @@ if __name__ == "__main__":
     import pickle
     with open("20240517_spectra.pkl", "rb") as fp:
         flux, ivar, all_meta = pickle.load(fp)
+    
+    m67 = []
+    for index, item in enumerate(all_meta):    
+        if item["sdss4_apogee_member_flags"] == 2**18: # M67
+            m67.append((index, item))
+
+    results = []
+    for index, item in tqdm(m67[:10]):        
+        θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index], use_jac=True)
         
-    for index, item in enumerate(all_meta):
-        if item["spectrum_pk"] == 16158599:
-            break
+        result = dict(zip(model.label_names, θ))
+        result["rchi2"] = rchi2
         
+        results.append((result, item))
         
-    stellar_parameters, continuum_parameters, chi2 = model.get_initial_guess(flux[index], ivar[index])
+        """
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.plot(model.λ, flux[index], c='k')
+        ax.plot(model.λ, y, c="tab:red")
+        
+        print(dict(zip(model.label_names, θ)))
+        print(rchi2)        
+        raise a
+        """
+    raise a
+    
+    from astropy.table import Table
+    r = Table(rows=[r[0] for r in results])
+    
+    
+    '''
+
+    '''
+    
+    raise a
+    
