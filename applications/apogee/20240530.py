@@ -2,7 +2,7 @@
 import numpy as np
 import jax
 #import jax.numpy as np
-
+from functools import partial
 from scipy.linalg import lu_factor, lu_solve
 from typing import Sequence, Optional
 from functools import cached_property
@@ -60,14 +60,23 @@ class Clam:
             ei = (i + 1) * n_parameters_per_region
             self.continuum_design_matrix[region_slice, si:ei] = design_matrix(λ[region_slice], deg)
             
-        L = len(self.label_names)
+        self.n_labels = len(self.label_names)
+        '''
         def f(θ):
             W = self.interpolator(θ[:L])
             return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[L:])
-                
-        self.f = f
+        
         self.g = jax.jacfwd(f)
+        '''
         return None
+    
+    @partial(jax.jit, static_argnums=(0,))
+    def __call__(self, θ: Sequence[float]):
+        print("compiling")
+        W = self.interpolator(θ[:self.n_labels])
+        return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
+    
+
 
     def scale_stellar_parameters(self, p):
         return (p - self.grid_min) / self.grid_ptp
@@ -138,7 +147,7 @@ class Clam:
 
 
     
-    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, use_jac=True, **kwargs):
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None):
             
         if p0 is None:
             stellar_parameters, continuum_parameters, chi2 = self.get_initial_guess(flux, ivar)
@@ -146,29 +155,20 @@ class Clam:
                 self.scale_stellar_parameters(stellar_parameters), 
                 continuum_parameters
             ])
-        
-        if use_jac:
 
-            θ, Σ = op.curve_fit(
-                lambda _, *p: self.f(np.array(p)),
-                self.λ,
-                flux,
-                p0=p0,
-                jac=lambda _, *p: self.g(np.array(p)),
-                sigma=ivar_to_sigma(ivar),
-                bounds=self.bounds,
-            )
+        g = jax.jacfwd(self)
         
-        else:
-            θ, Σ = op.curve_fit(
-                lambda _, *p: self.f(np.array(p)),
-                self.λ,
-                flux,
-                p0=p0,
-                sigma=ivar_to_sigma(ivar),
-                bounds=self.bounds,
-            )            
-        y = self.f(θ)
+        θ, Σ = op.curve_fit(
+            lambda _, *p: self(np.array(p)),
+            self.λ,
+            flux,
+            p0=p0,
+            jac=lambda _, *p: g(np.array(p)),
+            sigma=ivar_to_sigma(ivar),
+            bounds=self.bounds,
+        )
+    
+        y = self(θ)
         n_pixels = np.sum(ivar > 0)
         rchi2 = np.sum((flux - y)**2 * ivar) / (n_pixels - len(θ) - 1)
         
@@ -323,7 +323,6 @@ if __name__ == "__main__":
         with open(NMF_PATH, "wb") as fp:
             pickle.dump((W, H, meta), fp)
     
-    
     model = Clam(
         λ=10**(4.179 + 6e-6 * np.arange(8575)),
         H=H,
@@ -343,7 +342,7 @@ if __name__ == "__main__":
 
     results = []
     for index, item in tqdm(m67[:10]):        
-        θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index], use_jac=True)
+        θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index])
         
         result = dict(zip(model.label_names, θ))
         result["rchi2"] = rchi2
