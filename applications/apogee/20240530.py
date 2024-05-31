@@ -1,38 +1,55 @@
 
 import numpy as np
-import jax
+import warnings
 from functools import partial, cached_property
 from scipy.linalg import lu_factor, lu_solve
-from typing import Sequence, Optional
-import warnings
+from typing import Sequence, Optional, NamedTuple
 
-# TODO: move furniture around
+from jax import (jit, jacfwd as jacobian, numpy as jnp, scipy as jsp)
 from interpolate import RegularGridInterpolator
-#from jax_ndimage import gaussian_filter1d
-import jax.numpy as jnp
 
 LARGE = 1e10
 
+    
+
+class ClamFit(NamedTuple):
+    
+    """A named tuple to store a fit result from the Clam."""
+
+    label_names: Sequence[str]
+    stellar_parameters: Sequence[float]
+            
+    p_opt: Sequence[float]
+    p_cov: np.array
+    rchi2: float
+    dof: int
+
+    model_flux: Sequence[float]
+    continuum: Sequence[float]
+        
+    broadening_kernel: Optional[float] = None
+
+
 class BaseClam:
+    
+    """Base class for a constrained linear absorption model."""
 
     def __init__(
         self,
-        λ,
-        H,
-        W,
-        label_names,
-        grid_points,
-        modes=7,
-        regions=(
+        λ: Sequence[float],
+        H: Sequence[float],
+        W: Sequence[float],
+        label_names: Sequence[str],
+        grid_points: Sequence[Sequence[float]],
+        modes: Optional[int] = 7,
+        regions: Optional[Sequence[Sequence[float]]] = (
             (15161.84316643 - 35, 15757.66995776 + 60),
             (15877.64179911 - 25, 16380.98452330 + 60),
             (16494.30420468 - 30, 16898.18264895 + 60)
         ),
         **kwargs
     ):
-        """
-        A constrained linear absorption model.
-        
+        """        
         :param λ:
             The wavelength grid. This should be a `P`-length array.
             
@@ -155,7 +172,7 @@ class BaseClam:
     def __hash__(self):
         return id(self)    
 
-    @partial(jax.jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0,))
     def jacobian(self, θ: Sequence[float]):
         """
         Compute the Jacobian of the predicted model with respect to the model parameters.
@@ -171,7 +188,7 @@ class BaseClam:
             `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
             `P` is the number of pixels.
         """
-        return jax.jacfwd(self.__call__)(θ)
+        return jacobian(self.__call__)(θ)
     
     
     def scale_stellar_parameters(self, stellar_parameters: Sequence[float]) -> Sequence[float]:
@@ -316,12 +333,7 @@ class BaseClam:
             The initial guess for the model parameters.
         
         :returns:
-            A five-length tuple containing:
-            - the best-fit stellar parameters,
-            - the best-fit model parameters (including unscaled stellar parameters), 
-            - the covariance matrix of the best-fit parameters, 
-            - the model flux, and 
-            - the reduced chi-squared value.
+            A dictionary.
         """
             
         if p0 is None:
@@ -341,18 +353,57 @@ class BaseClam:
         )    
         y = self(θ)
         n_pixels = np.sum(ivar > 0)
-        rchi2 = np.sum((flux - y)**2 * ivar) / (n_pixels - len(θ) - 1)
+        dof = n_pixels - len(θ) - 1
+        rchi2 = np.sum((flux - y)**2 * ivar) / dof
         
-        # scale the θ and Σ for stellar params?
-        stellar_parameters = self.unscale_stellar_parameters(θ[:self.n_labels])        
-        return (stellar_parameters, θ, Σ, y, rchi2)
+        # scale the θ and Σ for stellar params.
+        θ[:self.n_labels] = self.unscale_stellar_parameters(θ[:self.n_labels])        
+        scale = np.atleast_2d(np.hstack([self.grid_ptp, np.ones(θ.size - self.n_labels)]))
+        scale = scale.T @ scale
+        assert scale.size > 1
+        Σ *= scale
+        
+        return dict(
+            p_opt=θ,
+            p_cov=Σ,
+            rchi2=rchi2,
+            dof=dof,
+            model_flux=y,
+            continuum=self.continuum_design_matrix @ θ[self.n_labels:self.n_labels + self.continuum_design_matrix.shape[1]],
+            label_names=self.label_names,
+            stellar_parameters=θ[:self.n_labels]
+        )
+                
+
+    def predict(self, θ):
+        """
+        Predict the flux given the stellar parameters and the continuum parameters.
+        
+        This is a wrapper around the `__call__` method which checks whether the 
+        first `L` labels are scaled or not. If any are outside the bounds of (0, 1)
+        then they will be scaled appropriately.
+        
+        :param θ:
+            The model parameters.
+        """
+        not_scaled = (
+            np.any(θ[:self.n_labels] > 1)
+        or  np.any(θ[:self.n_labels] < 0)
+        )
+        if not_scaled:
+            θ = np.copy(θ)
+            θ[:self.n_labels] = self.scale_stellar_parameters(θ[:self.n_labels])
+        return self(θ)
+
+
+
 
 
 class Clam(BaseClam):
     
-    """A constrained linear absorption model without rotational broadening."""
+    """A constrained linear absorption model."""
     
-    @partial(jax.jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0,))
     def __call__(self, θ: Sequence[float]):
         """
         Predict the flux given the stellar parameters and the continuum parameters.
@@ -368,18 +419,88 @@ class Clam(BaseClam):
             `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
             `P` is the number of pixels.
         """
-        W = self.interpolator(θ[:self.n_labels])
-        return (1 - W @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
+        return (1 - self.interpolator(θ[:self.n_labels]) @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
     
     
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, **kwargs):
+        """
+        Fit the model to the data.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.
+        
+        :param p0: [optional]
+            The initial guess for the model parameters.
+        
+        :returns:
+            A `ClamFit` named tuple.
+        """        
+        return ClamFit(**super(Clam, self).fit(flux, ivar, p0=p0, **kwargs))
+                    
 
-class RotationallyBroadenedClam(BaseClam):
+class ConvolvedClam(BaseClam):
     
-    """A constrained linear absorption model with rotational broadening."""
+    """A constrained linear absorption model with a Gaussian kernel to represent rotational broadening."""
+        
+    def __init__(
+        self,
+        λ: Sequence[float],
+        H: Sequence[float],
+        W: Sequence[float],
+        label_names: Sequence[str],
+        grid_points: Sequence[Sequence[float]],
+        modes: Optional[int] = 7,
+        regions: Optional[Sequence[Sequence[float]]] = (
+            (15161.84316643 - 35, 15757.66995776 + 60),
+            (15877.64179911 - 25, 16380.98452330 + 60),
+            (16494.30420468 - 30, 16898.18264895 + 60)
+        ),
+        initial_sigma: Optional[float] = 5,
+        upper_bound_sigma: Optional[float] = 10,
+        **kwargs
+    ):
+        """        
+        :param λ:
+            The wavelength grid. This should be a `P`-length array.
+            
+        :param H:
+            The components of the non-negative matrix factorization of the absorption.
+            This should be a `(C, P)` shaped array, where `C` is the number of components.
+        
+        :param W:
+            The weights of the components. This should be a `(*N, C)` shape array, where `N` is the
+            shape of the grid points.
+        
+        :param label_names:
+            The names of the stellar parameters.
+        
+        :param grid_points:
+            The grid points of the stellar parameters. This should be a `L`-length list of arrays,
+            where `L` is the number of stellar parameters. Each list should be ordered.
+        
+        :param modes: [optional]
+            The number of Fourier modes to use to model the continuum (in each region).
+        
+        :param regions: [optional]
+            The regions to model the continuum. This should be a list of tuples where each tuple
+            is a `(start, end)` wavelength region.
+        
+        :param upper_bound_sigma: [optional]
+            The upper bound on the broadening kernel. This is the number of pixels to convolve with
+            on either side of the kernel. The default is 10 pixels, which, for APOGEE spectra, corresponds
+            to a vsini of about 40 km/s.
+        """
+        size = 2 * 4 * self._upper_bound_sigma + 1
+        self._kernel_x = np.arange(0, size) - (size // 2)
+        self._initial_sigma = initial_sigma
+        self._upper_bound_sigma = upper_bound_sigma
+        return super(ConvolvedClam, self).__init__(λ, H, W, label_names, grid_points, modes=modes, regions=regions, **kwargs)
+
     
-    _initial_filter_sigma = 10.0
-    
-    @partial(jax.jit, static_argnums=(0,))
+    @partial(jit, static_argnums=(0, ))
     def __call__(self, θ: Sequence[float]):
         """
         Predict the flux given the stellar parameters and the continuum parameters.
@@ -395,17 +516,24 @@ class RotationallyBroadenedClam(BaseClam):
             `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
             `P` is the number of pixels.
         """
-        W = self.interpolator(θ[:self.n_labels])
-        rectified_flux = jnp.convolve(1 - W @ self.H, jnp.array([θ[-1]]))
-        return rectified_flux * (self.continuum_design_matrix @ θ[self.n_labels:-1])
-        
+        kernel = jsp.stats.norm.pdf(self._kernel_x, scale=θ[-1])
+        kernel /= jnp.sum(kernel)
+        return (
+            jnp.convolve(
+                1 - self.interpolator(θ[:self.n_labels]) @ self.H,
+                kernel, 
+                mode="same"
+            )
+        *   (self.continuum_design_matrix @ θ[self.n_labels:-1])
+        )
+                
 
     @cached_property
     def bounds(self):
         """Bounds on the model parameters."""
         return np.hstack([
-            super(RotationallyBroadenedClam, self).bounds, 
-            np.atleast_2d([0, np.inf]).T
+            super(ConvolvedClam, self).bounds, 
+            np.atleast_2d([0, self._upper_bound_sigma]).T # pixels
         ])
         
         
@@ -422,8 +550,8 @@ class RotationallyBroadenedClam(BaseClam):
         :param ivar:
             The inverse variance of the observed flux.
         """
-        x = super(RotationallyBroadenedClam, self).zero_absorption_initial_guess(flux, ivar)
-        return np.hstack([x, self._initial_filter_sigma])
+        x = super(ConvolvedClam, self).zero_absorption_initial_guess(flux, ivar)
+        return np.hstack([x, self._initial_sigma])
     
     
     def initial_guess(
@@ -452,11 +580,32 @@ class RotationallyBroadenedClam(BaseClam):
             The initial guess of the model parameters. If `full_output` is true, then an
             additional dictionary of metadata is returned.
         """        
-        x0, meta = super(RotationallyBroadenedClam, self).initial_guess(flux, ivar, max_iter=max_iter, full_output=True)
-        x0 = np.hstack([x0, self._initial_filter_sigma])
+        x0, meta = super(ConvolvedClam, self).initial_guess(flux, ivar, max_iter=max_iter, full_output=True)
+        x0 = np.hstack([x0, self._initial_sigma])
         return (x0, meta) if full_output else x0
     
-
+    
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, **kwargs):
+        """
+        Fit the model to the data.
+        
+        :param flux:
+            The observed flux.
+        
+        :param ivar:
+            The inverse variance of the observed flux.
+        
+        :param p0: [optional]
+            The initial guess for the model parameters.
+        
+        :returns:
+            A `ClamFit` named tuple.
+        """        
+        kwds = super(ConvolvedClam, self).fit(flux, ivar, p0=p0, **kwargs)
+        kwds["broadening_kernel"] = kwds["p_opt"][-1]
+        return ClamFit(**kwds)
+        
+        
 def ivar_to_sigma(ivar: Sequence[float]) -> Sequence[float]:
     """
     Convert the inverse variance to standard deviation.
@@ -516,7 +665,6 @@ def region_slices(λ, regions):
 def design_matrix(λ: np.array, modes: int) -> np.array:
     #L = 1300.0
     #scale = 2 * (np.pi / (2 * np.ptp(λ)))
-    deg = (modes - 1) // 2
     scale = np.pi / np.ptp(λ)
     return np.vstack(
         [
@@ -524,9 +672,9 @@ def design_matrix(λ: np.array, modes: int) -> np.array:
             np.array(
                 [
                     [np.cos(o * scale * λ), np.sin(o * scale * λ)]
-                    for o in range(1, deg + 1)
+                    for o in range(1, (modes - 1) // 2 + 1)
                 ]
-            ).reshape((2 * deg, λ.size)),
+            ).reshape((modes - 1, λ.size)),
         ]
     ).T
 
@@ -623,7 +771,7 @@ if __name__ == "__main__":
         with open(NMF_PATH, "wb") as fp:
             pickle.dump((W, H, meta), fp)
     
-    model = RotationallyBroadenedClam(
+    model = ConvolvedClam(
         λ=10**(4.179 + 6e-6 * np.arange(8575)),
         H=H,
         W=W,
@@ -636,41 +784,91 @@ if __name__ == "__main__":
         flux, ivar, all_meta = pickle.load(fp)
     
     m67 = []
+    pleades = []
+    ngc188 = []
     for index, item in enumerate(all_meta):    
         if item["sdss4_apogee_member_flags"] == 2**18: # M67
             m67.append((index, item))
+        if item["sdss4_apogee_member_flags"] == 2**17: # NGC188
+            ngc188.append((index, item))
+        if item["sdss4_apogee_member_flags"] == 2**20: # Pledas
+            pleades.append((index, item))
+            
 
-    results = []
-    for index, item in tqdm(m67[:100]):        
+    pleiades_results = []
+    for index, item in tqdm(pleades):        
+        '''
         stellar_parameters, θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index])
         
         result = dict(zip(model.label_names, stellar_parameters))
         result["vsini"] = θ[-1]
         result["rchi2"] = rchi2
+        '''
         
-        results.append(result)
+        result = model.fit(flux[index], ivar[index])
+        
+        pleiades_results.append(np.hstack([result.stellar_parameters, result.broadening_kernel]))
+        
         #(result, item))
+        '''
         
-        """
+        continue
+    
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
         ax.plot(model.λ, flux[index], c='k')
         ax.plot(model.λ, y, c="tab:red")
         
+        alt_θ = np.copy(θ)
+        alt_θ[-1] = 1e-5
+        
+        ax.plot(model.λ, model(alt_θ), c="tab:blue")
+        
+        alt_θ = np.copy(θ)
+        alt_θ[-1] = 100
+
+        ax.plot(model.λ, model(alt_θ), c="tab:orange")
+
+        
         print(dict(zip(model.label_names, θ)))
         print(rchi2)        
         raise a
-        """
+        '''
+
         
-    t = Table(rows=results)
+    t = Table(rows=pleiades_results, names=list(model.label_names) + ["vsini"])
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
-    scat = ax.scatter(t["Teff"], t["logg"], c=t["vsini"], s=5)
+    scat = ax.scatter(t["Teff"], t["logg"], c=t["m_h"], s=5)# vmin=0, vmax=5)
     ax.set_xlim(ax.get_xlim()[::-1])
     ax.set_ylim(ax.get_ylim()[::-1])
     
     cbar = plt.colorbar(scat)
     
+    model = Clam(
+        λ=10**(4.179 + 6e-6 * np.arange(8575)),
+        H=H,
+        W=W,
+        label_names=label_names,
+        grid_points=grid_points,
+    )
+        
+    
+    m67_results = []
+    for index, item in tqdm(m67):
+        result = model.fit(flux[index], ivar[index])
+        
+        m67_results.append(np.hstack([result.stellar_parameters, result.broadening_kernel]))
+    
+    t = Table(rows=m67_results, names=list(model.label_names) + ["vsini"])
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    scat = ax.scatter(t["Teff"], t["logg"], c=t["m_h"], s=5)# vmin=0, vmax=5)
+    ax.set_xlim(ax.get_xlim()[::-1])
+    ax.set_ylim(ax.get_ylim()[::-1])
+    
+    cbar = plt.colorbar(scat)
+        
     raise a
     
     from astropy.table import Table
