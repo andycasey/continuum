@@ -3,7 +3,7 @@ import numpy as np
 import warnings
 from functools import partial, cached_property
 from scipy.linalg import lu_factor, lu_solve
-from typing import Sequence, Optional, NamedTuple
+from typing import Sequence, Optional, NamedTuple, Union
 
 from jax import (jit, jacfwd as jacobian, numpy as jnp, scipy as jsp)
 from interpolate import RegularGridInterpolator
@@ -19,8 +19,10 @@ class ClamFit(NamedTuple):
     label_names: Sequence[str]
     stellar_parameters: Sequence[float]
             
+    p_init: Sequence[float]
     p_opt: Sequence[float]
     p_cov: np.array
+    
     rchi2: float
     dof: int
 
@@ -43,9 +45,9 @@ class BaseClam:
         grid_points: Sequence[Sequence[float]],
         modes: Optional[int] = 7,
         regions: Optional[Sequence[Sequence[float]]] = (
-            (15161.84316643 - 35, 15757.66995776 + 60),
-            (15877.64179911 - 25, 16380.98452330 + 60),
-            (16494.30420468 - 30, 16898.18264895 + 60)
+            (15120.0, 15820.0),
+            (15840.0, 16440.0),
+            (16450.0, 16960.0),
         ),
         **kwargs
     ):
@@ -68,8 +70,12 @@ class BaseClam:
             The grid points of the stellar parameters. This should be a `L`-length list of arrays,
             where `L` is the number of stellar parameters. Each list should be ordered.
         
-        :param modes: [optional]
+        :param modes:
             The number of Fourier modes to use to model the continuum (in each region).
+            
+        :param regions:
+            The regions to model the continuum. This should be a list of tuples where each tuple
+            is a `(start, end)` wavelength region.
         """
         if modes % 2 == 0:
             raise ValueError("modes must be an odd number")
@@ -92,13 +98,13 @@ class BaseClam:
             fill_value=0
         )
 
-        regions = regions or [tuple(λ[[0, -1]])]
+        self._regions = regions or [tuple(λ[[0, -1]])]
                         
         # Construct design matrix.        
-        self._continuum_design_matrix = np.zeros((λ.size, len(regions) * modes), dtype=float)
-        for i, region_slice in enumerate(region_slices(λ, regions)):
+        self._continuum_design_matrix = np.zeros((λ.size, len(self._regions) * modes), dtype=float)
+        for i, region_slice in enumerate(region_slices(λ, self._regions)):
             self._continuum_design_matrix[region_slice, i*modes:(i+1)*modes] = design_matrix(λ[region_slice], modes)
-            
+        
         self._n_labels = len(self.label_names)        
         return None
     
@@ -154,6 +160,11 @@ class BaseClam:
     def bounds(self):
         """Bounds on the model parameters."""
         return self._bounds
+    
+    @property
+    def regions(self):
+        """The regions to model the continuum."""
+        return self._regions
     
     @property
     def n_labels(self):
@@ -230,7 +241,9 @@ class BaseClam:
         flux: Sequence[float],
         ivar: Sequence[float],
         max_iter: Optional[int] = 10,
-        full_output: Optional[bool] = False
+        max_step_size: Optional[Union[int, Sequence[int]]] = 8,
+        full_output: Optional[bool] = False,
+        verbose: Optional[bool] = False,        
     ) -> Sequence[float]:
         """
         Step through the grid of stellar parameters to find a good initial guess.
@@ -243,14 +256,26 @@ class BaseClam:
         
         :param max_iter: [optional]
             The maximum number of iterations to take.
-                
+            
+        :param max_step_size: [optional]
+            The maximum step size to allow, either as a single value per label dimension, or as a
+            tuple of integers. If `None`, then no restriction is made on the maximum possible step,
+            which means that in the first iteration the only sampled values in one label might be
+            the: smallest value, highest value, and the middle value. Whereas if given, this sets
+            the maximum possible step size per dimension. This adds computational cost, but can
+            be useful to avoid getting stuck in local minima.
+                            
         :param full_output: [optional]
             Return a two-length tuple containing the initial guess and a dictionary of metadata.
+            
+        :param verbose: [optional]
+            Print verbose output.
         
         :returns:
             The initial guess of the model parameters. If `full_output` is true, then an
             additional dictionary of metadata is returned.
         """
+        
         A = self.continuum_design_matrix
         
         ATCinv = A.T * ivar
@@ -262,10 +287,20 @@ class BaseClam:
         x = np.empty((*full_shape, A.shape[1]))
         chi2 = LARGE * np.ones(full_shape)
         n_evaluations = 0
+        
+        if max_step_size is None:
+            max_step_size = full_shape
 
         # Even though this does not get us to the final edge point in some parameters,
-        # NumPy slicing creates a *view* instead of a copy, so it is more efficient.        
-        current_step = (np.array(full_shape) - 1) // 2
+        # NumPy slicing creates a *view* instead of a copy, so it is more efficient.                
+        current_step = np.clip(
+            (np.array(full_shape) - 1) // 2,
+            0,
+            max_step_size
+        )
+        if verbose:
+            print(f"initial step: {current_step}")
+                        
         current_slice = tuple(slice(0, 1 + end, step) for end, step in zip(full_shape, current_step))
                 
         for n_iter in range(1, 1 + max_iter):      
@@ -291,22 +326,38 @@ class BaseClam:
             relative_index = np.unravel_index(np.argmin(chi2[current_slice]), shape)
             absolute_index = tuple([rta[j][_] for j, _ in enumerate(relative_index)])
             
-            next_step = np.clip(current_step // 2, 1, full_shape)            
+            if verbose:
+                print("current_slice: ", current_slice)
+                for i, cs in enumerate(current_slice):
+                    print(f"\t{self.label_names[i]}: {self.grid_points[i][cs]}")
+                print(f"n_iter={n_iter}, chi2={chi2[absolute_index]}, x={[p[i] for p, i in zip(self.grid_points, absolute_index)]}")
+                print(f"absolute index {absolute_index} -> {dict(zip(self.label_names, [p[i] for p, i in zip(self.grid_points, absolute_index)]))}")
+                
+            next_step = np.clip(
+                np.clip(current_step // 2, 1, full_shape),
+                0,
+                max_step_size
+            )
+                
             next_slice = get_next_slice(absolute_index, next_step, full_shape)
+            if verbose:
+                print("next_slice", next_slice)
 
             if next_slice == current_slice and max(next_step) == 1:
+                if verbose:
+                    print("stopping")
                 break
             
             current_step, current_slice = (next_step, next_slice)
         else:
             warnings.warn(f"Maximum iterations reached ({max_iter}) for initial guess")
 
-        p0 = np.hstack([
+        p_init = np.hstack([
             self.scale_stellar_parameters([p[i] for p, i in zip(self.grid_points, absolute_index)]),
             x[absolute_index]
         ])
         if not full_output:
-            return p0
+            return p_init
         
         meta = dict(
             x=x,
@@ -316,10 +367,10 @@ class BaseClam:
             min_chi2=chi2[absolute_index],
             large=LARGE
         )
-        return (p0, meta)
+        return (p_init, meta)
 
 
-    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, **kwargs):
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p_init: Optional[Sequence[float]] = None, **kwargs):
         """
         Fit the model to the data.
         
@@ -329,15 +380,15 @@ class BaseClam:
         :param ivar:
             The inverse variance of the observed flux.
         
-        :param p0: [optional]
+        :param p_init: [optional]
             The initial guess for the model parameters.
         
         :returns:
             A dictionary.
         """
             
-        if p0 is None:
-            p0 = self.initial_guess(flux, ivar)            
+        if p_init is None:
+            p_init = self.initial_guess(flux, ivar)            
         
         kwds = dict(check_finite=False, absolute_sigma=True, bounds=self.bounds)
         kwds.update(**kwargs)
@@ -346,7 +397,7 @@ class BaseClam:
             lambda _, *p: self(np.array(p)),
             None,
             flux,
-            p0=p0,
+            p0=p_init,
             jac=lambda _, *p: self.jacobian(np.array(p)),
             sigma=ivar_to_sigma(ivar),
             **kwds
@@ -364,6 +415,7 @@ class BaseClam:
         Σ *= scale
         
         return dict(
+            p_init=p_init,
             p_opt=θ,
             p_cov=Σ,
             rchi2=rchi2,
@@ -402,6 +454,7 @@ class BaseClam:
 class Clam(BaseClam):
     
     """A constrained linear absorption model."""
+
     
     @partial(jit, static_argnums=(0,))
     def __call__(self, θ: Sequence[float]):
@@ -422,7 +475,7 @@ class Clam(BaseClam):
         return (1 - self.interpolator(θ[:self.n_labels]) @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
     
     
-    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, **kwargs):
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p_init: Optional[Sequence[float]] = None, **kwargs):
         """
         Fit the model to the data.
         
@@ -432,14 +485,14 @@ class Clam(BaseClam):
         :param ivar:
             The inverse variance of the observed flux.
         
-        :param p0: [optional]
+        :param p_init: [optional]
             The initial guess for the model parameters.
         
         :returns:
             A `ClamFit` named tuple.
         """        
-        return ClamFit(**super(Clam, self).fit(flux, ivar, p0=p0, **kwargs))
-                    
+        return ClamFit(**super(Clam, self).fit(flux, ivar, p_init=p_init, **kwargs))
+
 
 class ConvolvedClam(BaseClam):
     
@@ -454,9 +507,9 @@ class ConvolvedClam(BaseClam):
         grid_points: Sequence[Sequence[float]],
         modes: Optional[int] = 7,
         regions: Optional[Sequence[Sequence[float]]] = (
-            (15161.84316643 - 35, 15757.66995776 + 60),
-            (15877.64179911 - 25, 16380.98452330 + 60),
-            (16494.30420468 - 30, 16898.18264895 + 60)
+            (15120.0, 15820.0),
+            (15840.0, 16440.0),
+            (16450.0, 16960.0),
         ),
         initial_sigma: Optional[float] = 5,
         upper_bound_sigma: Optional[float] = 10,
@@ -493,7 +546,7 @@ class ConvolvedClam(BaseClam):
             on either side of the kernel. The default is 10 pixels, which, for APOGEE spectra, corresponds
             to a vsini of about 40 km/s.
         """
-        size = 2 * 4 * self._upper_bound_sigma + 1
+        size = 2 * 4 * upper_bound_sigma + 1
         self._kernel_x = np.arange(0, size) - (size // 2)
         self._initial_sigma = initial_sigma
         self._upper_bound_sigma = upper_bound_sigma
@@ -559,7 +612,9 @@ class ConvolvedClam(BaseClam):
         flux: Sequence[float],
         ivar: Sequence[float],
         max_iter: Optional[int] = 10,
-        full_output: Optional[bool] = False
+        max_step_size: Optional[Union[int, Sequence[int]]] = 8,        
+        full_output: Optional[bool] = False,
+        **kwargs
     ):
         """
         Step through the grid of stellar parameters to find a good initial guess.
@@ -572,7 +627,12 @@ class ConvolvedClam(BaseClam):
         
         :param max_iter: [optional]
             The maximum number of iterations to take.
-                
+
+        :param max_step_size: [optional]
+            The maximum step size to allow, either as a single value per label dimension, or as a
+            tuple of integers. If given, this sets the maximum possible step size per dimension.
+            This might be helpful to avoid getting stuck in local minima.
+
         :param full_output: [optional]
             Return a two-length tuple containing the initial guess and a dictionary of metadata.
         
@@ -580,12 +640,19 @@ class ConvolvedClam(BaseClam):
             The initial guess of the model parameters. If `full_output` is true, then an
             additional dictionary of metadata is returned.
         """        
-        x0, meta = super(ConvolvedClam, self).initial_guess(flux, ivar, max_iter=max_iter, full_output=True)
+        x0, meta = super(ConvolvedClam, self).initial_guess(
+            flux,
+            ivar,
+            max_iter=max_iter,
+            max_step_size=max_step_size,
+            full_output=True,
+            **kwargs
+        )
         x0 = np.hstack([x0, self._initial_sigma])
         return (x0, meta) if full_output else x0
     
     
-    def fit(self, flux: Sequence[float], ivar: Sequence[float], p0: Optional[Sequence[float]] = None, **kwargs):
+    def fit(self, flux: Sequence[float], ivar: Sequence[float], p_init: Optional[Sequence[float]] = None, **kwargs):
         """
         Fit the model to the data.
         
@@ -595,13 +662,13 @@ class ConvolvedClam(BaseClam):
         :param ivar:
             The inverse variance of the observed flux.
         
-        :param p0: [optional]
+        :param p_init: [optional]
             The initial guess for the model parameters.
         
         :returns:
             A `ClamFit` named tuple.
         """        
-        kwds = super(ConvolvedClam, self).fit(flux, ivar, p0=p0, **kwargs)
+        kwds = super(ConvolvedClam, self).fit(flux, ivar, p_init=p_init, **kwargs)
         kwds["broadening_kernel"] = kwds["p_opt"][-1]
         return ClamFit(**kwds)
         
@@ -689,7 +756,7 @@ if __name__ == "__main__":
 
     from scipy import optimize as op
     from tqdm import tqdm
-    from astropy.table import Table    
+    #from astropy.table import Table    
         
     from interpolate import RegularGridInterpolator
         
@@ -793,50 +860,78 @@ if __name__ == "__main__":
             ngc188.append((index, item))
         if item["sdss4_apogee_member_flags"] == 2**20: # Pledas
             pleades.append((index, item))
-            
+
+    indices = np.array([e[0] for e in m67])
+    
+    p0 = np.array([model.initial_guess(flux[i], ivar[i]) for i in tqdm(indices)])
+    
+    # scale the stellar parameters
+    p0[:, :model.n_labels] = model.unscale_stellar_parameters(p0[:, :model.n_labels])
+    
+    fp = h5.File("m67_data.h5", "w")
+    fp.create_dataset("flux", data=flux[indices])
+    fp.create_dataset("ivar", data=ivar[indices])
+    fp.create_dataset("p0", data=p0)
+    fp.close()
+    
 
     pleiades_results = []
     for index, item in tqdm(pleades):        
-        '''
-        stellar_parameters, θ, Σ, y, rchi2 = model.fit(flux[index], ivar[index])
-        
-        result = dict(zip(model.label_names, stellar_parameters))
-        result["vsini"] = θ[-1]
-        result["rchi2"] = rchi2
-        '''
         
         result = model.fit(flux[index], ivar[index])
         
-        pleiades_results.append(np.hstack([result.stellar_parameters, result.broadening_kernel]))
-        
-        #(result, item))
-        '''
-        
-        continue
+        pleiades_results.append((index, result, item))
+
+    raise a
+
+    e_m_h = [e[1].p_cov[3, 3]**0.5 for e in pleiades_results]
+    t = Table(rows=[e[1].stellar_parameters for e in pleiades_results], names=list(model.label_names))
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    scat = ax.scatter(t["Teff"], t["logg"], c=e_m_h, s=5)# vmin=0, vmax=5)
+    ax.set_xlim(ax.get_xlim()[::-1])
+    ax.set_ylim(ax.get_ylim()[::-1])
     
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-        ax.plot(model.λ, flux[index], c='k')
-        ax.plot(model.λ, y, c="tab:red")
-        
-        alt_θ = np.copy(θ)
-        alt_θ[-1] = 1e-5
-        
-        ax.plot(model.λ, model(alt_θ), c="tab:blue")
-        
-        alt_θ = np.copy(θ)
-        alt_θ[-1] = 100
+    cbar = plt.colorbar(scat)
+    
+    raise a
 
-        ax.plot(model.λ, model(alt_θ), c="tab:orange")
+    results = []
+    for index, item in tqdm(m67):
+        result = model.fit(flux[index], ivar[index])
+        results.append((index, result, item))
+        
+        #fig, ax = plt.subplots()
+        #ax.plot(model.λ, flux[index], c='k')
+        #ax.plot(model.λ, result.model_flux, c="tab:red")
+        
+
+    t = Table(
+        np.array([r[1].stellar_parameters for r in results]), 
+        names=model.label_names
+    )
+
+    rchi2 = np.array([r[1].rchi2 for r in results])
+    vrot = np.array([r[1].broadening_kernel for r in results])
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    scat = ax.scatter(t["Teff"], t["logg"], c=rchi2, s=5)# vmin=0, vmax=5)#t["m_h"], s=5)# vmin=0, vmax=5)
+    ax.set_xlim(ax.get_xlim()[::-1])
+    ax.set_ylim(ax.get_ylim()[::-1])
+    
+    cbar = plt.colorbar(scat)
+    
+
+    pleiades_results = []
+    for index, item in tqdm(pleades):        
+        
+        result = model.fit(flux[index], ivar[index])
+        
+        pleiades_results.append((index, result, item))
+
 
         
-        print(dict(zip(model.label_names, θ)))
-        print(rchi2)        
-        raise a
-        '''
-
-        
-    t = Table(rows=pleiades_results, names=list(model.label_names) + ["vsini"])
+    t = Table(rows=[e[1].stellar_parameters for e in pleiades_results], names=list(model.label_names))
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     scat = ax.scatter(t["Teff"], t["logg"], c=t["m_h"], s=5)# vmin=0, vmax=5)
@@ -844,6 +939,8 @@ if __name__ == "__main__":
     ax.set_ylim(ax.get_ylim()[::-1])
     
     cbar = plt.colorbar(scat)
+    
+    raise a
     
     model = Clam(
         λ=10**(4.179 + 6e-6 * np.arange(8575)),

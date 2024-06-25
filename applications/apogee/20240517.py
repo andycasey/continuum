@@ -276,7 +276,6 @@ class Clam(object):
         fit_vsini=False,
         x0_params=None,
         x0_vsini=100,
-        x0=None,
         **kwargs
     ):
         try:
@@ -284,7 +283,7 @@ class Clam(object):
         except:
             self.A1 = self.full_design_matrix(1)
             
-        if x0_params is None and x0 is None:
+        if x0_params is None:
             _, meta_init = self.fit(flux, ivar, full_output=True)
 
             x0_params, = random_forest_regressor.predict(meta_init["W"].reshape((1, -1)))
@@ -309,32 +308,30 @@ class Clam(object):
             C, P = self.components.shape
             A_slice = A[:, C:]
             
-            if x0 is None:
-                # given x0_params, predict initial W coefficients.
-                W_init = np.clip(basis_weight_interpolator(x0_params), 0, np.inf)
-                init_rectified_model_flux = (1 - W_init @ self.components).flatten()
-                
-                '''
-                x02 = self.get_initial_guess_with_small_W(
-                    flux / init_rectified_model_flux, 
-                    ivar * init_rectified_model_flux**2,
-                    A, 
-                    small=1e-10
-                )
-                '''
-                # TODO: put to function
-                use = ~self.get_mask(ivar * init_rectified_model_flux**2).flatten()
-                Y = (flux.flatten() / init_rectified_model_flux)[use]
-                C_inv = np.diag((ivar[0] * init_rectified_model_flux**2)[use])
-                
-                B = A[use, C:]
-                x0_continuum = np.linalg.solve(B.T @ C_inv @ B, B.T @ C_inv @ Y)
-                                                    
-                x0 = np.hstack([
-                    x0_params, # stellar params  
-                    x0_continuum # continuum params,
-                ])
+            # given x0_params, predict initial W coefficients.
+            W_init = np.clip(basis_weight_interpolator(x0_params), 0, np.inf)
+            init_rectified_model_flux = (1 - W_init @ self.components).flatten()
             
+            '''
+            x02 = self.get_initial_guess_with_small_W(
+                flux / init_rectified_model_flux, 
+                ivar * init_rectified_model_flux**2,
+                A, 
+                small=1e-10
+            )
+            '''
+            # TODO: put to function
+            use = ~self.get_mask(ivar * init_rectified_model_flux**2).flatten()
+            Y = (flux.flatten() / init_rectified_model_flux)[use]
+            C_inv = np.diag((ivar[0] * init_rectified_model_flux**2)[use])
+            
+            B = A[use, C:]
+            x0_continuum = np.linalg.solve(B.T @ C_inv @ B, B.T @ C_inv @ Y)
+                                                
+            x0 = np.hstack([
+                x0_params, # stellar params  
+                x0_continuum # continuum params,
+            ])
             
             if fit_vsini:
                 x0 = np.hstack([x0, x0_vsini])
@@ -915,7 +912,6 @@ if __name__ == "__main__":
         bounds_error=False,
         fill_value=0
     )
-    
 
     # train a random forest regressor    
     rf_model = RandomForestRegressor(
@@ -926,7 +922,15 @@ if __name__ == "__main__":
     )
     rf_model.fit(W, scale(grid))
     
+    from time import time
+    t_init = time()
+    pred_param = unscale(rf_model.predict(W))
+    print(f"prediction time: {time() - t_init:.2f}s")
+    diff = pred_param - grid
     
+    print(f"Label bias / standard deviation")
+    for i, label_name in enumerate(label_names):
+        print(f"{label_name} {np.mean(diff[:, i]):.2f} {np.std(diff[:, i]):.2f}")
 
     import pickle
     with open("20240517_spectra.pkl", "rb") as fp:
@@ -938,41 +942,8 @@ if __name__ == "__main__":
         #if item["spectrum_pk"] == 16439299:
         #    break
     
-    # Let's get a really good initial guess, using all Ws.    
-    A = clam_model.continuum_design_matrix
+
     
-    def get_initial_guess(flux, ivar, skip=1):        
-        rchi2 = 1e10 * np.ones(W.shape[0])
-        x0s = np.empty((W.shape[0], A.shape[1]))
-        for i, w in enumerate(tqdm(W[::skip])):
-            rectified = (1 - w @ H)    
-            Y, Cinv = (flux / rectified, ivar * rectified**2)
-            ATCinv = A.T * Cinv
-            ATCinvA = ATCinv @ A
-            ATCinvY = ATCinv @ Y
-            
-            x0 = np.linalg.solve(ATCinvA, ATCinvY)
-            
-            rchi2[i] = np.sum(((A @ x0) * rectified - flux)**2 * ivar)
-            x0s[i] = x0
-        
-            
-        rchi2 = rchi2.reshape(grid_model_flux.shape[:-1])
-        index = np.argmin(rchi2)
-        unravel_index = np.unravel_index(indices=index, shape=rchi2.shape)
-        
-        initial_params = []
-        for i, x in enumerate(grid_points):
-            initial_params.append(x[unravel_index[i]])
-        
-        full_x0 = list(scale(initial_params)) + list(x0s[index])
-        return (initial_params, rchi2[unravel_index], full_x0)
-            
-    initial_params, rchi2, x0 = get_initial_guess(flux[index], ivar[index])    
-    
-    print(f"Initial params: {initial_params}")
-    
-    from time import time
     t_init = time()
     _, meta = clam_model.fit_stellar_parameters(
         flux[index],
@@ -982,25 +953,19 @@ if __name__ == "__main__":
         label_names=label_names,
         unscale=unscale,
         full_output=True,
-        x0=x0,
-        x0_params=scale(initial_params)
     )
     print(time() - t_init)
     
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots()
     ax.plot(wavelength, flux[index], c='k')
-    ax.plot(wavelength, meta["model_flux"], c="tab:blue")
+    ax.plot(wavelength, meta["model_flux"], c="tab:red")
     print(meta["initial_stellar_parameters"])
     print(meta["stellar_parameters"])
     print(meta["rchi2"])
     
     
-    
-    raise a
-        
-
-    IMAGE_SUFFIX = "cm_0_grid_init_skip_100"
+    IMAGE_SUFFIX = "cm_0_init_6000_4"
     # Do M67
     N, P = flux.shape
     
@@ -1014,8 +979,6 @@ if __name__ == "__main__":
         if all_meta[i]["spectrum_pk"] in done:
             continue
         
-        initial_params, rchi2, x0 = get_initial_guess(flux[i], ivar[i], skip=100)
-        
         try:
             _, meta = clam_model.fit_stellar_parameters(
                 flux[i],
@@ -1026,8 +989,7 @@ if __name__ == "__main__":
                 unscale=unscale,
                 full_output=True,
                 #fit_vsini=True,
-                x0=x0,
-                x0_params=scale(initial_params)
+                x0_params=scale([0, 1, 4, 6000])
             )
         except KeyboardInterrupt:
             break

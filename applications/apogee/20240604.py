@@ -5,7 +5,8 @@ from functools import partial, cached_property
 from scipy.linalg import lu_factor, lu_solve
 from typing import Sequence, Optional, NamedTuple, Union
 
-from jax import (jit, jacfwd, numpy as jnp, scipy as jsp)
+#from jax import (jit, jacfwd, numpy as jnp, scipy as jsp)
+from numba import jit
 from interpolate import RegularGridInterpolator as JaxRegularGridInterpolator
 from scipy.interpolate import RegularGridInterpolator
 
@@ -439,7 +440,7 @@ class BaseClam:
 class Clam(BaseClam):
     
     """A constrained linear absorption model."""
-    
+
     def __call__(self, θ: Sequence[float]):
         """
         Predict the flux given the stellar parameters and the continuum parameters.
@@ -455,10 +456,10 @@ class Clam(BaseClam):
             `continuum_design_matrix` attribute, as that matrix should have shape `(P, C)` where 
             `P` is the number of pixels.
         """
-        return (1 - self.interpolator(θ[:self.n_labels], method="slinear") @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
+        return (1 - self.interpolator(θ[:self.n_labels], method="slinear").flatten() @ self.H) * (self.continuum_design_matrix @ θ[self.n_labels:])
     
         
-    
+    #@jit #@partial(jit)# static_argnums=(0,))    
     def jacobian(self, θ: Sequence[float]):
         """
         Compute the Jacobian of the predicted model with respect to the model parameters.
@@ -748,7 +749,6 @@ if __name__ == "__main__":
     fig, ax = plt.subplots()
     ax.scatter(g1.flatten(), g2.flatten())
     
-    raise a
 
     pleiades_results = []
     for index, item in tqdm(pleades):        
@@ -756,6 +756,8 @@ if __name__ == "__main__":
         result = model.fit(flux[index], ivar[index])
         
         pleiades_results.append((index, result, item))
+        
+    raise a
 
 
     e_m_h = [e[1].p_cov[3, 3]**0.5 for e in pleiades_results]
