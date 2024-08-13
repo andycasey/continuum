@@ -33,8 +33,9 @@ shadow=false,
 % text macros
 %\newcommand{\chosentitle}{Constrained linear models for stellar spectroscopy}
 %\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
-\newcommand{\chosentitle}{The Unreasonable Effectiveness of Linear Models in Stellar Spectroscopy}
+%\newcommand{\chosentitle}{The Unreasonable Effectiveness of Linear Models in Stellar Spectroscopy}
 %\newcommand{\chosentitle}{Stellar continuum modelling}
+\newcommand{\chosentitle}{Constrained linear models for stellar spectroscopy}
 
 \shorttitle{\chosentitle}
 \shortauthors{Casey}
@@ -71,28 +72,30 @@ shadow=false,
 \title{\chosentitle}
 
 \author[0000-0003-0174-0564]{Andrew R. Casey}
-\affiliation{School of Physics \& Astronomy, Monash University}
+\affiliation{School of Physics \& Astronomy, Monash University, Australia}
 \affiliation{Centre of Excellence for Astrophysics in Three Dimensions (ASTRO-3D)}
 \affiliation{Center for Computational Astrophysics, Flatiron Institute, a division of the Simons Foundation}
 
-\author[0000-0003-2866-9403]{David W. Hogg}
-\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University}
-\affiliation{Max-Planck-Institut f\"ur Astronomie, Heidelberg}
-\affiliation{Center for Computational Astrophysics, Flatiron Institute, a division of the Simons Foundation}
+\author{friends}
+%\author[0000-0003-2866-9403]{David W. Hogg}
+%\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University}
+%\affiliation{Max-Planck-Institut f\"ur Astronomie, Heidelberg}
+%\affiliation{Center for Computational Astrophysics, Flatiron Institute, a division of the Simons Foundation}
 
 % Other people who will be invited as co-authors (non-exhaustive list):
 %   Wheeler, Sayjdari, Bedell, Astra folks, CCA data group 
 
 
 \begin{abstract}\noindent
-Forward modelling stellar spectra usually requires a spectral synthesis code, and/or a non-linear interpolator constructed from a curated training set. These approaches also require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias subsequent inferences.
+Forward modelling stellar spectra usually requires a spectral synthesis code, or some non-linear interpolator constructed from a curated training set. 
+These approaches require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias subsequent measurements.
 Here we present a \emph{linear} model that simultaneously fits stellar absorption and the joint continuum-instrument response.
-%The stellar absorption is modelled by non-negative matrix factorization of a grid of theoretically rectified spectra, and a sine-and-cosine basis to model the joint continuum-instrument response.
-%The linearity inference is stable and fast.
-Stellar absorption is modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices (basis weights and basis vectors) with basis vectors kept fixed at inference time, and the joint continuum-instrument response is modelled with a sine-and-cosine basis.
-The non-negativity constraint ensures that basis vectors are strictly additive, and by maintaining linearity we ensure that inference is convex, stable, and fast.
-When we restructure our forward model to \emph{linearly} interpolate from grid parameters to basis weights, we show that the stellar parameters we infer are in closer agreement with \todo{astrophysical expectations} than those reported using neural networks or high-dimensional cubic spline interpolation.
-We apply our model to \project{Sloan Digital Sky Survey} infrared spectra of OBAFGKM-type main-sequence and giant stars.
+The joint continuum-instrument response is modelled with a Fourier basis, and stellar absorption is modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors. 
+The non-negativity constraint ensures that basis vectors are strictly additive.
+Together this set of bases represents a linear model for stellar spectra, which ensures that inference is convex, stable, and fast.
+We demonstrate this method by simultaneous fits to high-resolution echelle spectra, where continuum is usually fit per order.
+When we restructure our forward model to \emph{linearly} interpolate from stellar parameters to basis weights, we show the the stellar parameters we infer from \project{Sloan Digital Sky Survey} infrared spectra are in closer agreement with \todo{astrophysical expectations} than those reported using neural networks or high-dimensional cubic spline interpolation.
+
 %Continuum normalization is often a necessary step when analyzing stellar spectra. 
 %The ideal approach might be to forward model the continuum (and instrument response) simultaneously with the stellar parameters, but continuum normalization is often required before stellar parameters are estimated.
 %Here we present a forward model to simultaneously fit stellar absorption and the joint continuum-instrument response using two linear components: a non-negative matrix factorization that models stellar line absorption, and a sines-and-cosines basis to model the joint continuum-instrument response.
@@ -124,7 +127,7 @@ We discuss limitations and potential extensions of our work in Section~\ref{sec:
 
 \section{Methods}\label{sec:methods}
 
-We will assume a forward model that includes two components: one represents continuum-normalized absorption (e.g., line absorption); and another to represent the smooth continuum.\footnote{Throughout this paper when we refer to the continuum, we mean the joint continuum-instrument response. These are different things that enter multiplicatively, but cannot be disentangled without extra work.} We will assume both components to be linear models, ensuring that inference is fast and stable. In practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalization and for estimating stellar parameters.\\
+We will assume a forward model that includes two components: one that represents continuum-normalized absorption (e.g., line absorption); and another to represent the smooth continuum.\footnote{Throughout this paper when we refer to the continuum, we mean the joint continuum-instrument response. These are different things that enter multiplicatively, but cannot be disentangled without extra work.} We will require both components to be linear models, which ensures that inference is stable and fast. In practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalization and for estimating stellar parameters.\\
 
 %In all variants we assume that non-negative matrix factorization (NMF) is sufficient to represent continuum-normalized line absorption in a large variety of stellar spectra. 
 
@@ -134,24 +137,26 @@ We will assume a forward model that includes two components: one represents cont
 
 Here we will describe the method in general before outlining explicit assumptions and implementation details. The data are a one-dimensional spectrum with $P$ pixels, where the $i$-th pixel has wavelength $\lambda_i$, flux $y_i$, and flux error $\sigma_{y_i}$ (with $1 \leq i \leq P$). The forward model for these data can be expressed as the element-wise multiplication of what we will describe as the line absorption model $f(\lambda_i; \vecpsi)$ and the continuum-instrument response model $g(\lambda_i;\vectheta)$
 \begin{align}
-    y_i &= f(\lambda_i;\vecpsi)\hadamard{}g(\lambda_i;\vectheta) + \mbox{noise}
+    y &= f(\lambda;\vecpsi)\hadamard{}g(\lambda;\vectheta) + \mbox{noise}
 \end{align}
-where the components $f(...)$ and $g(...)$ are defined below. Throughout this paper we fit in (natural) log-transformed data space $\log{y_i}$ which transforms our element-wise (Hadamard; $\hadamard$) product into the sum
+where the components $f(...)$ and $g(...)$ are defined below. Throughout this paper we fit in (natural) log-transformed data space $\vec{Y} = \log{\vec{y}}$ where the covariance matrix $\vec{C}$ has the transformed flux variances $\vec{C}_{ii} = (y_{i}\sigma_{y,i})^2$ along the diagonal. The log-transformation changes the element-wise (Hadamard; $\hadamard$) product into the summation:
 \begin{align}
     \label{eq:log_y}
-    \log{y_i} &= \log{f(\lambda_i; \vecpsi)} + \log{g(\lambda_i;\vectheta)} + \mbox{noise} \quad .
+    \vec{Y} &= \log{f(\vec{\lambda}; \vecpsi)} + \log{g(\vec{\lambda};\vectheta)} \quad .
 \end{align}
-where we take the transformed flux error $y_i\sigma_{y_i}$ as the noise on $\log{y_i}$.\\
-
 
 The line absorption model $f(\lambda_i;\vecpsi)$ predicts the line absorption at wavelength $\lambda_i$ given parameters $\vecpsi$. We construct the line absorption model $f(\lambda_i;\vecpsi)$ from a set of $N$ continuum-normalized theoretical spectra (each with $D$ fluxes) using non-negative matrix factorization (NMF). In the applications that we present here, the theoretical spectra used to approximate the line absorption model are assumed to have the same wavelength sampling and line spread function as the data, such that we use a grid of model spectra where $D = P$. Other situations are permitted, but at inference time there is a need to evaluate the line absorption model to the $P$ observed wavelengths.\\
 
-We refer to our $N \times D$ matrix of continuum-rectified theoretical spectra as $\vec{M}$. This is a dense matrix: there are no entries of exactly zero. However, a small transformation to this matrix makes it extremely sparse. Numerous transformations are possible\footnote{Another sparse transformation is $1 - \vec{M}$, but this makes our resulting model non-linear.}, but for many reasons we chose to factorize the negative logarithm of $\vec{M}$ into two smaller matrices $\vec{W}$ and $\vec{H}$ such that,
-\begin{align}
+We refer to our $N \times D$ matrix of continuum-rectified theoretical spectra as $\vec{M}$. This is a dense matrix: there are no entries of exactly zero. However, a small transformation
+%\begin{eqnarray}
+%    \vec{X} \equiv -\log\left({\vec{M}}\right)
+%\end{eqnarray}
+to this matrix can make it it extremely sparse. Numerous transformations are possible\footnote{Another sparse transformation is $1 - \vec{M}$, but this makes our resulting model non-linear.}, but for many reasons we chose to factorize the negative logarithm of $\vec{M}$ into two smaller matrices $\vec{W}$ and $\vec{F}$ such that,
+\begin{eqnarray}
     \label{eq:nmf}
-    \vec{W}\,\vec{H} \approx -\log\left({\vec{M}}\right)
-\end{align}
-where $\vec{W}$ is a $N \times C$ matrix of \emph{basis weights}, where $C$ is the number of chosen basis vectors, and $\vec{H}$ is a $C \times D$ matrix of NMF \emph{basis vectors}. All elements in $-\log{\vec{M}}$, $\vec{W}$, and $\vec{H}$ are required to be non-negative. The number of basis components $C$ should be significantly smaller than both the number of input spectra $N$ and the number of pixels $D$ per spectrum. Figure~\ref{fig:schematic} illustrates some example basis vectors factorized from theoretical spectra in the \apogee\ wavelength range.\\
+    -\log\left({\vec{M}}\right) \approx \vec{W}\transpose\vec{F}
+\end{eqnarray}
+where $\vec{W}$ is a $K \times N$ matrix of \emph{basis weights}, where $K$ is the number of chosen basis vectors, and $\vec{F}$ is a $K \times D$ matrix of NMF \emph{basis vectors}. All elements in $-\log\left({\vec{M}}\right)$, $\vec{W}$, and $\vec{F}$ are required to be non-negative. The number of basis components $K$ should be significantly smaller than both the number of input spectra $N$ and the number of pixels $D$ per spectrum. Figure~\ref{fig:schematic} illustrates some example basis vectors factorized from theoretical spectra in the \apogee\ wavelength range.\\
 
 
 %on previous works on NMF and data analysis more broadly. We would like the naming conventions to be consistent with those papers, but this nomenclature is easily overloaded. For this reason, we make clear definitions: throughout this paper we will refer to $\vecW$ as the NMF \emph{basis weights} and $\vecH$ as the NMF \emph{basis vectors}. \\
@@ -161,10 +166,10 @@ where $\vec{W}$ is a $N \times C$ matrix of \emph{basis weights}, where $C$ is t
 
 %The nomenclature  draws on previous works on NMF and data analysis, but this nomenclature is easy to overload, so throughout this paper we will refer to $\vecW$ as the NMF \emph{basis weights}, $\vecpsi$ as the NMF \emph{basis coefficients}, $\vecH$ as the NMF \emph{basis vectors}, and $\vectheta$ (not yet defined) will refer to the amplitudes of the sine-and-cosine basis.
 
-The factorization of $-\log{\vec{M}}$ into $\vecW\vecH$ is reasonably fast and easy to compute given existing packages in modern programming languages. We found substantial improvements by initializing $\vecH$ with non-negative double singular value decomposition, where zeros were filled-in with the average of $\vecX$: this is the default behaviour in most modern implementation.s As reported elsewhere, we found that factorizing $\vecW\vecH$ by coordinate descent was substantially faster than using multiplicative updates.\\
+The factorization of $-\log\left({\vec{M}}\right)$ into $\vec{W}\transpose\vec{F}$ is reasonably fast and easy to compute given existing packages in modern programming languages. We found substantial improvements by initializing $\vec{F}$ with non-negative double singular value decomposition, where zeros were filled-in with the average of $-\log\left({\vec{M}}\right)$: this is the default behaviour in many packages. We found that factorizing $\vec{W}\transpose\vec{F}$ by coordinate descent was substantially faster than using multiplicative updates, although the multiplicative update rules are appealing because they are convex and do not require many choices.\\
 %At inference time, $\vecpsi$ is analogous to the basis weights found at training time \\
 
-There are very few requirements of the theoretical spectral grid. There are no requirements on the number of dimensions (e.g., whether or not to include $[\alpha/\mathrm{Fe}]$, $[\mathrm{C/Fe}]$), and no strict requirements (see Section~\ref{sec:discussion}) on spacing in between points. The only implicit requirement is that the theoretical spectra should approximately span the range of stars that you intend to fit. This is more of a recommendation than a requirement: in practice we found that a grid trained on theoretical spectra of OBA-type stars was also sufficiently flexible to model many (but not all) white dwarf spectra. For these reasons, we chose to include as many theoretical spectra as our memory constraints would allow.\footnote{If the number of spectra exceeds your memory constraints then there are numerous strategies available: you can use memory-mapped arrays, use lower precision float types, or simply skip every $n$th theoretical spectrum.}\\
+There are very few requirements of the theoretical spectral grid. There are no requirements on the number of dimensions (e.g., whether or not to include $[\alpha/\mathrm{Fe}]$, $[\mathrm{C/Fe}]$), and no strict requirements (see Section~\ref{sec:discussion}) on spacing in between points. The only implicit requirement is that the theoretical spectra should approximately span the range of stars that you intend to fit. This is more of a recommendation than a requirement: in practice we found that a grid trained on theoretical spectra of OBA-type stars was also sufficiently flexible to model many (but not all) white dwarf spectra. For these reasons, we chose to include as many theoretical spectra as our memory constraints would allow.\footnote{If the number of spectra exceeds your memory constraints then there are numerous strategies available: you can use memory-mapped arrays, use lower precision float types, compute updates in batches, or simply skip every $n$th spectrum.}\\
 
 
 \begin{figure*}
@@ -177,42 +182,52 @@ There are very few requirements of the theoretical spectral grid. There are no r
 %. Factorizing the data-driven and hybrid approaches is described later in this section. In any case, computing the factorization can be finished in seconds or hours, depending on the scale of the matrices $\vecW$ and $\vecH$.\\
 
 %We used the \texttt{scipy.decomposition.NMF} implementation \citep{scipy} with some minor adjustments to minimize the memory requirements (e.g., allowing for lower precision float types). We used no regularization on $\vecW$ or $\vecH$. We found substantial improvements by initializing $\vecH$ with non-negative double singular value decomposition with zeros filled-in with the average of $\vecX$ (the default behavior in the \texttt{scipy} implementation). Initializing with random or small non-negative values produced comparable results but required many more iterations. We stopped the approximation of $\vecW$ and $\vecH$ after 1,000 iterations of multiplicative updates. This took minutes to hours to complete, depending on the size of the theoretical grid $\vecX$.\\
-\todo{At inference time, vecpsi is analogous to W}
 
 
-\noindent{}With the matrix $\vec{H}$ we can now define the logarithm of line absorption function $f(\lambda_i;\vecpsi)$, which follows from Equations~\ref{eq:log_y} and \ref{eq:nmf},
+\noindent{}With the matrix $\vec{F}$ we can now define the logarithm of line absorption function $\log{f(\lambda_i;\vecpsi)}$, which follows from Equations~\ref{eq:log_y} and \ref{eq:nmf},
 \begin{align}
-    \log{f(\lambda_i;\vecpsi)} = -\vecpsi\vecH \label{eq:f}
+    \log{f(\lambda_i;\vecpsi)} = -\vec{F}\transpose\vecpsi \label{eq:f}
 \end{align}
-where $\vecpsi \in [0, \infty)$ are a row vector of $C$ \emph{basis weights}. At inference time, $\vecpsi$ is analogous to a single row in $\vecW$: it represents the $C$ weights needed to reconstruct the stellar absorption from the $C$ basis vectors in $\vecH$. Note that because $\vecpsi$ and $\vecH$ are both restricted to have non-negative elements, this severely restricts the flexibility of $f(...)$, leaving $g(...)$ to represent the joint continuum-instrument response.\\
+where $\vecpsi \in [0, \infty)$ is a column vector of $C$ \emph{basis weights} to be solved at inference time. Here, $\vecpsi$ is analogous to a column in $\vecW$: it represents the $C$ weights needed to reconstruct the stellar absorption from the $C$ basis vectors $\vec{F}$. Note that because $\vecpsi$ and $\vec{F}$ are both restricted to have non-negative elements, this severely restricts the flexibility of $f(...)$, leaving $g(...)$ to represent the smooth continuum-instrument response. \\
 
 There are many suitable choices for the logarithm of the continuum-instrument response model $\log{g(\lambda_i;\vectheta)}$. Here we chose a Fourier basis of sine and cosine functions because it is a linear representation, and is sufficiently flexible for modelling the joint continuum-instrument response across a variety of spectrographs. The component $\log{g(\lambda_i;\vectheta)}$ is expressed compactly as
 \begin{align}
-    \log{g(\lambda_i;\vectheta)} = \vec{C}\vectheta
+    \log{g(\lambda_i;\vectheta)} = \vec{G}\vectheta
 \end{align}
-where $\vec{C}$ is a design matrix where the elements of the $j$th column are, % todo: shape of design matrix
+where $\vec{G}$ is a design matrix where the elements of the $j$th column are, % todo: shape of design matrix
 \begin{align}
-    \vec{C}_{j}(\lambda_i) & = \left\{\begin{array}{cl}\displaystyle\cos\left(\frac{\pi\,[j-1]}{L}\,\lambda_i\right) & \mbox{for $j$ odd} \\[3ex]
+    \vec{G}_{j}(\lambda_i) & = \left\{\begin{array}{cl}\displaystyle\cos\left(\frac{\pi\,[j-1]}{L}\,\lambda_i\right) & \mbox{for $j$ odd} \\[3ex]
                                        \displaystyle\sin\left(\frac{\pi\,j}{L}\,\lambda_i\right) & \mbox{for $j$ even}\end{array}\right. ~,
 \end{align}
-\noindent{}and the design matrix $\vec{C}(\vec{\lambda})$ can be constructed \emph{a priori} before inference begins. Throughout this paper we will describe $\vectheta$ as the sine-and-cosine \emph{coefficients}.\\
+\noindent{}and the design matrix $\vec{G}(\vec{\lambda})$ can be constructed \emph{a priori} before inference begins. Throughout this paper we will describe $\vectheta$ as the sine-and-cosine \emph{coefficients}.\\
 
-With $f(\lambda_i;\vecpsi)$ and $g(\lambda_i;\vectheta)$ now defined, we can expand the forward model for $\log{y_i}$ to show
+\noindent{}With $f(\lambda_i;\vecpsi)$ and $g(\lambda_i;\vectheta)$ now defined, we can expand the forward model for the log-transformed data $\vec{Y}$,
 \begin{equation}
-    \log{y_i} = -\vecpsi\vecH + \vec{C}\vectheta
+    \vec{Y} = -\vec{F}\transpose\vecpsi + \vec{G}\vectheta
 \end{equation}
 \begin{equation}
-    \log{y_i} = \vec{A}\vec{X}
+    \vec{Y} = \vec{A}\vec{X}
 \end{equation}
 where the parameters and design matrices are stacked to construct $\vec{A}$ and $\vec{X}$:
 \begin{eqnarray}
-    \vec{A} = \begin{bmatrix}-\vec{H}\\\vec{C}\end{bmatrix}
+    \vec{A} = \begin{bmatrix}-\vec{F}\transpose\\\vec{G}\end{bmatrix} \quad .
     \quad \mbox{and} \quad 
     \vec{X} = \begin{bmatrix}\vecpsi\\\vectheta\end{bmatrix} 
-    \quad .
+\end{eqnarray}
+Given some observed log-transformed flux $\vec{Y}$ and associated covariance matrix $\vec{C}$, this reduces to a weighted least-squares problem which is subject to the constraint $\vecpsi \geq 0$
+\begin{eqnarray}
+    \vec{\tilde{X}} = (\vec{A}\transpose\vec{C}^{-1}\vec{A})^{-1}\vec{A}\transpose\vec{C}^{-1}\vec{Y} \quad ,
 \end{eqnarray}
 
+\noindent{}where the un-transformed rectified flux and continuum can be computed in a straightorward manner:
+\begin{eqnarray}
+    f(\boldsymbol{\tilde{\psi}}) &\,=\,& \exp{\left(-\vec{F}\transpose\boldsymbol{\tilde{\psi}}\right)} \\
+    g(\boldsymbol{\tilde{\theta}}) &\,=\,& \exp{\left(\vec{G}\boldsymbol{\tilde{\theta}}\right)}
+\end{eqnarray}
+
+
 %In this formalism, spectral regions can be fit independently with different degrees of freedom. The number of continuum coefficients scales as $2n_\textrm{degree} + 1$ per region. \\
+
 
 %The method can be readily applied to real data once the eigenspectra $\vecH$ have been computed. We experimented with choices of initialisation and inference. Since both components are linear and have closed-form solutions, we did find some success by alternating between solving for $\vecpsi$ and $\vectheta$, but ultimately chose to optimize all parameters $\{\vecpsi,\vectheta\}$ simultaneously. The number of parameters scales as $C + n_\textrm{regions}(2n_\textrm{degree} + 1)$: $C$ amplitudes for $C$ eigenspectra ($\vecpsi$), and $2n_\textrm{degree} + 1$ sine-and-cosine coefficients ($\vectheta$) per chosen continuum region (e.g., per chip). Initializing from small ($10^{-12}$) values of $\vecpsi$ and a closed-form solution of $\vectheta$ (conditioned on small $\vecpsi$) seemed to work well in many scenarios. \\
 
