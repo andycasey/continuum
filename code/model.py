@@ -219,10 +219,12 @@ class Clam:
                 model_rectified_flux,
             )
             v_rel = -v_shift
-
-        fig, ax = plt.subplots()
-        ax.plot(λ_vacuum, z, c='k')
-        ax.plot(λ_vacuum, A @ result.x, c="tab:red")
+        
+        #import matplotlib.pyplot as plt
+        #fig, ax = plt.subplots()
+        #ax.plot(λ_vacuum, z, c='k')
+        #ax.plot(λ_vacuum, A @ result.x, c="tab:red")
+        #raise a
 
         # Compute continuum for all other orders given this rectified flux.
         λ_vacuum, z, inv_sigma_z, oi, pi, S, P = prepared_spectra = _prepare_spectra(spectra)
@@ -266,6 +268,7 @@ class Clam:
         vsini: Optional[float] = None,
         callback: Optional[callable] = None,
         op_kwds: Optional[dict] = None,
+        **kwargs
     ):
         """
         Fit the model to some spectra in the observed frame.
@@ -299,6 +302,7 @@ class Clam:
             R=R,
             v_rel=v_rel,
             vsini=vsini,
+            **kwargs,
         )
         print(v_rel)
 
@@ -532,6 +536,7 @@ if __name__ == "__main__":
         tel_λ, tel_label_names, tel_parameters, tel_W, tel_H = pickle.load(fp)
 
     # Let's fit every order individually and see what happens.
+    
     model = Clam(
         λ, 
         H,
