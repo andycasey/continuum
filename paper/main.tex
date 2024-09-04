@@ -103,10 +103,16 @@ These approaches require pre-processing steps (e.g., continuum rectification) wh
 Here we present a \emph{linear} model that simultaneously fits stellar absorption, telluric transmission, and the joint continuum-instrument response.
 The joint continuum-instrument response is modelled with a Fourier basis. Stellar absorption and telluric transmission is each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
 The non-negativity constraint ensures that basis vectors are strictly additive.
-Together this set of bases represents a linear model for stellar spectra, which ensures that inference is convex, stable, and fast.
+Together this set of bases represents a very effective linear model for stellar spectroscopy, where the linearity ensures that inference is convex, stable, and fast.
 This model allows us to reliably fit the stellar absorption, tellurics, continuum, radial velocity, and rotational broadening, without any prior knowledge about the fundamental stellar parameters.
-We demonstrate this method by fits to high-resolution echelle spectra, where we achieve \todo{X\%} accuracy in continuum normalization with no apparent biases at low signal-to-noise ratios (e.g., $<10$).
+We demonstrate our method by fitting \eso/\harps\ high-resolution echelle spectra of OBAFGKM-type stars.
+% TODO: talk about how fast it is for 10^6 pixels and hundreds of params?
+We show from repeat observations of $\alpha$-Centauri A that our approach yields continuum estimates that are about five times more consistent than the best existing methods: better than 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30.
 \end{abstract}
+
+% for S/N > 100, 1-sigma scatter is 0.22%
+% for S/N > 50, 1-sigma scatter is 0.35%
+% for S/N > 30, 1-sigma scatter is 0.46%
 
 \keywords{Some --- keywords --- here}
 
@@ -250,9 +256,15 @@ We modelled the continuum in each echelle order as a set of $\todo{M}$ Fourier m
 
 \section{Results} \label{sec:results}
 
-We found it usually takes a few core-seconds to fit each exposure ($3\times10^6$~pixels; all echelle orders). Most of this time is spent constructing the design matrix, which required (linearly) interpolating the stellar and telluric basis vectors on to the observed wavelengths. The fits to each star are partially shown in Figure~\ref{fig:harps-example}. In all cases the data are shown in black, with the stellar absorption model in \todo{red}, telluric transmission in \todo{color}, and continuum in \todo{color}. In bluer echelle orders, there are no pixels that are true `continuum' pixels (i.e., no absorption). Any continuum normalization method trying to fit these echelle orders would be biased if they did not have a good representation of what stellar spectra look like. Overall, the fits to the data look very good, with reduced $\chi^2$ values from \todo{A to B}.\\
+We found it usually takes a few core-seconds to fit each exposure ($3\times10^6$~pixels; all echelle orders fit simultaneously). Most of this time is spent constructing the design matrix, which requires (linearly) interpolating the stellar and telluric basis vectors to the observed wavelengths. The fits to each star are partially shown in Figure~\ref{fig:harps-example}. In all cases the data are shown in black, with the stellar absorption model in \todo{red}, telluric transmission in \todo{color}, and continuum in \todo{color}. Overall, the fits to the data are very good, with reduced $\chi^2$ values from \todo{A to B}.\\
 
+In bluer echelle orders, it can be seen that there are no pixels that are true `continuum' pixels (i.e., no absorption). Any continuum normalization method trying to fit these echelle orders would be biased if they did not have a good representation of what stellar spectra look like. \\
 
+Maintaining consistent continuum rectification for low signal-to-noise spectra is challenging. Without a model for stellar spectra or the relative strengths of absorption lines, noisy signals can mimic stellar absorption, causing the continuum to become systematically biased at low signal-to-noise ratios. For this reason, we sought to estimate the consistency of continuum normalization as a function of signal-to-noise ratio.\\
+
+We searched the \eso/\harps/ archive for a star that has been repeatedly observed with a wide range of exposure times, usually because it is the subject of radial velocity asteroseismic monitoring. Through this search we identified alpha Centauri A, which has been observed more than \todo{X} times with \harps. Importantly, there are $\alpha$-Centauri spectra with signal-to-noise ratios of 10, and a nearly even sampling of spectra up to S/N of 300, or even higher (where saturation is visible in the reduced spectra\footnote{Naughty observer.}). We constructed bins of SNR from 0 to 200 in steps of 10. We selected an $\alpha$-Centauri spectrum for every SNR bin interval to provide an even sampling of spectra at low and high SNR. We fit our model to each spectrum, treating it as totally indepdendent from all others.\\
+
+\todo{Now we can see how things behave as a function of SNR.}
 
 \todo{Consistency at low signal-to-noise}
 % alf Cen 95th percentile (all wavelengths)
@@ -265,8 +277,6 @@ We found it usually takes a few core-seconds to fit each exposure ($3\times10^6$
 
 % If our perormance on alpha Cen A is comparable to theirs on alpha Cen B, then
 % our method is about 5x more accurate
-
-
 
 
 %The method can be readily applied to real data once the eigenspectra $\vecH$ have been computed. We experimented with choices of initialisation and inference. Since both components are linear and have closed-form solutions, we did find some success by alternating between solving for $\vecalpha$ and $\vectheta$, but ultimately chose to optimize all parameters $\{\vecalpha,\vectheta\}$ simultaneously. The number of parameters scales as $C + n_\textrm{regions}(2n_\textrm{degree} + 1)$: $C$ amplitudes for $C$ eigenspectra ($\vecalpha$), and $2n_\textrm{degree} + 1$ sine-and-cosine coefficients ($\vectheta$) per chosen continuum region (e.g., per chip). Initializing from small ($10^{-12}$) values of $\vecalpha$ and a closed-form solution of $\vectheta$ (conditioned on small $\vecalpha$) seemed to work well in many scenarios. \\
@@ -282,17 +292,6 @@ This is a convex problem that is mathmatically guaranteed to yield the solution 
 
 
 
-
-
-
-We want to show:
-\begin{enumerate}
-    \item How does the mean/median rectified flux vary as a function of S/N for the same star (e.g., 18 Sco)?
-    \item What do the fits look like for a few carefully chosen spectral types?
-    \item What regularisation strength did we need to apply?
-\end{enumerate}
-
-
 \begin{figure}
     \caption{Median observed rectified flux values as a function of S/N ratio showing that there is no bias as a function of S/N ratio.}
 \end{figure}
@@ -304,7 +303,13 @@ We want to show:
 
 - getting good fits with bad models
 
+- getting bad models with good fits
+
+- emission lines
+
 - model interpretability
+
+- estimating precision in continuum rectification
 
 - biases as a function of S/N
 
