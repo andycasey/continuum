@@ -4,6 +4,7 @@ from astropy.io import fits
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import os
 
 from spectrum import Spectrum
 from model import Clam, apply_radial_velocity_shift
@@ -100,27 +101,35 @@ for row in tqdm(meta_subset):
 
     try:
         path = "../applications/harps/alfCenA/" + row["path"]
-        spectra = load_harps_e2ds(path)
+        if os.path.exists(f"{path}.pkl"):
+            with open(f"{path}.pkl", "rb") as fp:
+                (result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred) = pickle.load(fp)
+        else:
+                
+            spectra = load_harps_e2ds(path)
 
-        (result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred) = model.fit(
-            spectra, 
-            continuum_basis=Sinusoids(5),
-            λ_initial=4861,
-            v_rel=0.0 # already at rest frame.
-        )
-        with open(f"{path}.pkl", "wb") as fp:
-            pickle.dump((result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred), fp)
+            (result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred) = model.fit(
+                spectra, 
+                continuum_basis=Sinusoids(5),
+                λ_initial=4861,
+                v_rel=0.0 # already at rest frame.
+            )
+            with open(f"{path}.pkl", "wb") as fp:
+                pickle.dump((result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred), fp)
             
-        percentiles = np.percentile(np.array([s.flux / c for s, c in zip(spectra, continuum)]).flatten(), [90, 95, 97.5])
     except:
         print(f"Failured on {row['path']}")
 
     else:
-        results.append((row["path"], row["snr"], result.status, result.cost, result.optimality, *percentiles))
+        norm_flux = np.array([s.flux / c for s, c in zip(spectra, continuum)]).flatten()
+        percentiles = np.percentile(norm_flux, [90, 95, 97.5])
+        std = np.std(norm_flux)
+
+        results.append((row["path"], row["snr"], result.status, result.cost, result.optimality, std,  *percentiles))
 
 from astropy.table import Table
-t = Table(rows=results, names=("path", "snr", "status", "cost", "optimality", "p_90", "p_95", "p_97.5"))
-t.write("alfCenA_stability.csv")
+t = Table(rows=results, names=("path", "snr", "status", "cost", "optimality", "std_norm_flux", "p_90", "p_95", "p_97.5"))
+t.write("alfCenA_stability.csv", overwrite=True)
 raise a
 
 

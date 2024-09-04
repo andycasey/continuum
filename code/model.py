@@ -176,12 +176,15 @@ class Clam:
         vsini: Optional[float] = None,
         v_rel: Optional[float] = None,
         op_kwds: Optional[dict] = None,
+        initial_order = None,
     ):
         """
         Fit one order to get an initial estimate of the model parameters.
         """
-
-        spectrum = get_closest_order(spectra, λ_initial)
+        if initial_order is not None:
+            spectrum = initial_order
+        else:
+            spectrum = get_closest_order(spectra, λ_initial)
         λ_vacuum, z, inv_sigma_z, oi, pi, S, P = _prepare_spectra([spectrum])
         # TODO: using diferent initial polynomial 
         G, *_ = _continuum_design_matrix(λ_vacuum, Polynomial(2), S, oi)
