@@ -318,8 +318,8 @@ def load_harps_e2ds(path, **kwargs):
         meta = get_meta_dict(hdulist)
         meta.update(rv_meta)
 
-        si, ei = (30, 40)
-
+        si = kwargs.get("si", 0)
+        ei = kwargs.get("ei", n_orders)
 
         return SpectrumCollection(
             λ=λ[si:ei],

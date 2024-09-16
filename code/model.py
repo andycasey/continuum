@@ -24,7 +24,7 @@ from typing import Iterable
 
 
 from spectrum.lsf import instrument_lsf_kernel, rotational_broadening_kernel
-from spectrum import Spectrum
+from spectrum import Spectrum, SpectrumCollection
 from scipy.optimize._lsq.trf_linear import trf_linear
 
 
@@ -91,81 +91,39 @@ class Clam:
             self.telluric_basis_vectors is not None 
         and self.telluric_vacuum_wavelength is not None
         )
-            
-
-    def _prepare_basis_vectors(self, λ_observed, λ, basis_vectors, v_rel=None, vsini=None, R=None):
-
-
-        λ_out = apply_radial_velocity_shift(λ, v_rel)
         
-        kernels = []
+        
+    def prepare(self, spectra, vsini=None):
+
+        λ_rest_vacuum, λ_vacuum, *_ = prepared_spectra = _prepare_spectra(spectra)
+        
+        stellar_basis_vectors = self.stellar_basis_vectors
         if vsini is not None:
-            kernels.append(rotational_broadening_kernel(λ, vsini, 0.6))        
-        if Ro is not None:
-            kernels.append(instrument_lsf_kernel(λ, λ_out, R))
+            K_lsf = rotational_broadening_kernel(self.stellar_vacuum_wavelength, vsini, 0.6)
+            stellar_basis_vectors = stellar_basis_vectors @ K_lsf
 
-        raise a
+        basis_vectors = np.vstack([
+            _interpolate_basis_vector(
+                λ_rest_vacuum,
+                self.stellar_vacuum_wavelength, 
+                stellar_basis_vectors
+            )
+        ])
 
+        if self.can_model_tellurics:
+            # need the observed vacuum wavelengths
+            telluric_basis_vectors = _interpolate_basis_vector(
+                λ_vacuum,
+                self.telluric_vacuum_wavelength,
+                self.telluric_basis_vectors
+            )
+            basis_vectors = np.vstack([basis_vectors, telluric_basis_vectors])
 
-    def resample_basis_vectors(self, λ_vacuum, vsini=None, stellar_v_rel=0.0, telluric_v_rel=0.0, Ro=None, Ri=None, telluric=False):
-        """
-        Resample (and optionally convolve) the basis vectors to the observed wavelengths.
-        
-        :param λ_vacuum:
-            The observed vacuum wavelengths.
-        
-        :param Ro: [optional]
-            The spectral resolution of the observations. If `None` is given, then no
-            convolution will take place; the basis vectors will be interpolated.
-        
-        :param Ri: [optional]
-            The spectral resolution of the basis vectors. If `None` is given then
-            it defaults to the input spectral resolution stored in the metadata of
-            the basis vector file, or infinity if the input spectral resolution is
-            not stored in that file.
-                
-        """
-
-        print(f"stellar_v_rel={stellar_v_rel}")
-        
-        λ_vacuum_obs = apply_radial_velocity_shift(λ_vacuum, stellar_v_rel)
-        
-        if Ro is None:
-            if vsini is not None:
-                K_lsf = rotational_broadening_kernel(self.stellar_vacuum_wavelength, vsini, 0.6)
-                basis_vectors = [_interpolate_basis_vector(λ_vacuum_obs, self.stellar_vacuum_wavelength, self.stellar_basis_vectors @ K_lsf)]
-                assert not telluric
-
-            else:
-                # Interpolation only.            
-                basis_vectors = [_interpolate_basis_vector(λ_vacuum_obs, self.stellar_vacuum_wavelength, self.stellar_basis_vectors)]
-                if telluric:
-                    basis_vectors.append(_interpolate_basis_vector(λ_vacuum, self.telluric_vacuum_wavelength, self.telluric_basis_vectors))
-            
-        else:
-            # Convolution
-            Ri = Ri or self.meta.get("Ri", np.inf)
-
-            # special case to avoid double-building the same convolution kernel            
-            K = instrument_lsf_kernel(self.stellar_vacuum_wavelength, λ_vacuum_obs, Ro, Ri)                
-
-            basis_vectors = [self.stellar_basis_vectors @ K]
-            if telluric:
-                # Only reconstruct the kernel if the v_rel != 0
-                if stellar_v_rel != 0 or telluric_v_rel != 0:
-                    K = instrument_lsf_kernel(
-                        self.telluric_vacuum_wavelength, 
-                        apply_radial_velocity_shift(λ_vacuum, telluric_v_rel),
-                        Ro, 
-                        Ri
-                    )
-                basis_vectors.append(self.telluric_basis_vectors @ K)
-    
-        basis_vectors = np.vstack(basis_vectors)
         S = self.stellar_basis_vectors.shape[0]
         T = basis_vectors.shape[0] - S
+        return (prepared_spectra, basis_vectors, S, T)
+    
 
-        return (basis_vectors, S, T)
 
     def get_initial_fit(
         self,
@@ -174,7 +132,6 @@ class Clam:
         λ_initial: Optional[float] = 5175,
         R: Optional[float] = None,  
         vsini: Optional[float] = None,
-        v_rel: Optional[float] = None,
         op_kwds: Optional[dict] = None,
         initial_order = None,
     ):
@@ -185,11 +142,11 @@ class Clam:
             spectrum = initial_order
         else:
             spectrum = get_closest_order(spectra, λ_initial)
-        λ_vacuum, z, inv_sigma_z, oi, pi, S, P = _prepare_spectra([spectrum])
+
+        (λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi, pi, S, P), basis_vectors, *n_different_bases = self.prepare([spectrum], vsini=vsini)
+        
         # TODO: using diferent initial polynomial 
         G, *_ = _continuum_design_matrix(λ_vacuum, Polynomial(2), S, oi)
-
-        basis_vectors, *n_different_bases = self.resample_basis_vectors(λ_vacuum, Ro=R, vsini=vsini, stellar_v_rel=v_rel)
 
         A = np.hstack([-basis_vectors.T, G])
                 
@@ -208,37 +165,14 @@ class Clam:
         Y_sigma_z = z[use] * use_inv_sigma_z
 
         result = op.lsq_linear(A_sigma_z, Y_sigma_z, **kwds)
-        
+
         n_bases = sum(n_different_bases)
 
-        if v_rel is None:
-            continuum = A[:, n_bases:] @ result.x[n_bases:]
-            model_rectified_flux = (A @ result.x) / continuum                
-            v_shift, *_ = cross_correlate(
-                λ_vacuum,
-                z/continuum,
-                np.ones_like(z),
-                λ_vacuum,
-                model_rectified_flux,
-            )
-            v_rel = -v_shift
-        
-        #import matplotlib.pyplot as plt
-        #fig, ax = plt.subplots()
-        #ax.plot(λ_vacuum, z, c='k')
-        #ax.plot(λ_vacuum, A @ result.x, c="tab:red")
-        #raise a
-
         # Compute continuum for all other orders given this rectified flux.
-        λ_vacuum, z, inv_sigma_z, oi, pi, S, P = prepared_spectra = _prepare_spectra(spectra)
+        prepared_spectra, basis_vectors, n_stellar_bases, n_telluric_bases = self.prepare(spectra, vsini=vsini)
+        λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi, pi, S, P = prepared_spectra
         G, continuum_basis, n_continuum_params = prepared_continuum = _continuum_design_matrix(λ_vacuum, continuum_basis, S, oi)        
-        basis_vectors, *n_different_bases = prepared_basis_vectors = self.resample_basis_vectors(
-            λ_vacuum, 
-            stellar_v_rel=v_rel,
-            Ro=R,
-            vsini=vsini
-        )
-
+        
         model_rectified_flux = (-basis_vectors.T) @ result.x[:n_bases]
         use = inv_sigma_z > 0
 
@@ -258,7 +192,7 @@ class Clam:
                 None
             si += n
     
-        return (p0, v_rel, prepared_spectra, prepared_continuum, prepared_basis_vectors)
+        return (p0, prepared_spectra, prepared_continuum, basis_vectors, n_stellar_bases, n_telluric_bases)
 
 
 
@@ -267,7 +201,6 @@ class Clam:
         spectra: Sequence[Spectrum],
         continuum_basis: Union[ContinuumBasis, Sequence[ContinuumBasis]] = Sinusoids,
         R: Optional[float] = None,
-        v_rel: Optional[float] = None,
         vsini: Optional[float] = None,
         callback: Optional[callable] = None,
         op_kwds: Optional[dict] = None,
@@ -298,41 +231,22 @@ class Clam:
             A function to call after each iteration of the optimization.
         """
         
-        print(f"v_rel_in={v_rel}")
-        (p0, v_rel, prepared_spectra, prepared_continuum, prepared_basis_vectors) = self.get_initial_fit(
+        (p0, prepared_spectra, prepared_continuum, basis_vectors, n_stellar_bases, n_telluric_bases) = self.get_initial_fit(
             spectra, 
             continuum_basis, 
             R=R,
-            v_rel=v_rel,
             vsini=vsini,
             **kwargs,
         )
-        print(v_rel)
 
-
-        λ_vacuum, z, inv_sigma_z, oi, pi, S, P = prepared_spectra                
+        λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi, pi, S, P = prepared_spectra                
         G, continuum_basis, n_continuum_params = prepared_continuum        
-        basis_vectors, n_stellar_bases, n_telluric_bases = prepared_basis_vectors
-
-        n_bases = n_stellar_bases + n_telluric_bases
-        """
-        cont = G @ p0[n_bases:]
-
-        in_absorption = (z / cont) < 0.90
-        multiplier = np.ones_like(inv_sigma_z)
-        multiplier[in_absorption] = 1/100.
-
-        #fig, ax = plt.subplots()
-        #ax.plot(λ_vacuum, z / cont)
-        
-        print("using absorption multiplier")        
-        """
         A = np.hstack([-basis_vectors.T, G])
         
         bounds = self.get_bounds(A.shape[1], n_stellar_bases, n_telluric_bases)
 
         use = (inv_sigma_z > 0)
-        use_inv_sigma_z = inv_sigma_z[use] #* multiplier[use]
+        use_inv_sigma_z = inv_sigma_z[use]
         A_sigma_z = A[use] * use_inv_sigma_z[:, None]
         Y_sigma_z = z[use] * use_inv_sigma_z
 
@@ -415,9 +329,13 @@ def _continuum_design_matrix(λ_vacuum, continuum_basis, S, oi):
 
 
 def get_closest_order(spectra, λ):
-    mid = np.array([np.mean(s.λ) for s in spectra])
-    diff = np.abs(mid - λ)
-    return spectra[np.argmin(diff)]
+    if isinstance(spectra, SpectrumCollection):
+        diff = np.abs(np.mean(spectra.λ, axis=1) - λ)
+        return spectra.get_order(np.argmin(diff))
+    else:    
+        mid = np.array([np.mean(s.λ) for s in spectra])
+        diff = np.abs(mid - λ)
+        return spectra[np.argmin(diff)]
 
 
 
@@ -436,27 +354,46 @@ def instantiate(item, **kwargs):
         return item
 
 def _prepare_spectra(spectra):
-    spectra = [spectra] if isinstance(spectra, Spectrum) else spectra
-    S = len(spectra)
-    P = sum(tuple(map(len, spectra)))
-    
-    λ_vacuum, z, inv_sigma_z, oi = (np.empty(P), np.empty(P), np.empty(P), np.empty(P, dtype=int))
-    for i, (si, spectrum) in enumerate(cumulative(spectra)):
-        ei = si + spectrum.λ.size
-        oi[si:ei] = i
-        λ_vacuum[si:ei] = spectrum.λ_vacuum
-        z[si:ei] = np.log(spectrum.flux)
-        y = spectrum.flux
-        sigma_y = spectrum.ivar**(-0.5)
-        sigma_z = sigma_y/y - (sigma_y**2)/(2 * y**2) + (2*sigma_y**3)/(8 * y**3) - (6 * sigma_y**4)/(24 * y**4)
-        inv_sigma_z[si:ei] = 1/sigma_z
+    if isinstance(spectra, SpectrumCollection):
+        S, P_per_S = spectra.flux.shape
+        P = P_per_S * S
+
+        si = 0
+        λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi = (np.empty(P), np.empty(P), np.empty(P), np.empty(P), np.empty(P, dtype=int))
+        for i in range(S):
+            ei = si + P_per_S
+            oi[si:ei] = i
+            λ_vacuum[si:ei] = spectra.λ_vacuum[i]
+            λ_rest_vacuum[si:ei] = spectra.λ_rest_vacuum[i]
+            z[si:ei] = np.log(spectra.flux[i])
+            y = spectra.flux[i]
+            sigma_y = spectra.ivar[i]**(-0.5)
+            sigma_z = sigma_y/y - (sigma_y**2)/(2 * y**2) + (2*sigma_y**3)/(8 * y**3) - (6 * sigma_y**4)/(24 * y**4)
+            inv_sigma_z[si:ei] = 1/sigma_z
+            si += P_per_S
+    else:
+        spectra = [spectra] if isinstance(spectra, Spectrum) else spectra
+        S = len(spectra)
+        P = sum(tuple(map(len, spectra)))
+
+        λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi = (np.empty(P), np.empty(P), np.empty(P), np.empty(P), np.empty(P, dtype=int))
+        for i, (si, spectrum) in enumerate(cumulative(spectra)):
+            ei = si + spectrum.λ.size
+            oi[si:ei] = i
+            λ_vacuum[si:ei] = spectrum.λ_vacuum            
+            λ_rest_vacuum[si:ei] = spectrum.λ_rest_vacuum
+            z[si:ei] = np.log(spectrum.flux)
+            y = spectrum.flux
+            sigma_y = spectrum.ivar**(-0.5)
+            sigma_z = sigma_y/y - (sigma_y**2)/(2 * y**2) + (2*sigma_y**3)/(8 * y**3) - (6 * sigma_y**4)/(24 * y**4)
+            inv_sigma_z[si:ei] = 1/sigma_z
         
     pi = np.argsort(λ_vacuum) # pixel indices
-    λ_vacuum, z, inv_sigma_z, oi = (λ_vacuum[pi], z[pi], inv_sigma_z[pi], oi[pi])
+    λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi = (λ_rest_vacuum[pi], λ_vacuum[pi], z[pi], inv_sigma_z[pi], oi[pi])
     
     bad_pixel = (~np.isfinite(z)) | (~np.isfinite(inv_sigma_z))
     inv_sigma_z[bad_pixel] = 0
-    return (λ_vacuum, z, inv_sigma_z, oi, pi, S, P)
+    return (λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi, pi, S, P)
 
 
 def _expand_continuum_basis(continuum_basis, S):
