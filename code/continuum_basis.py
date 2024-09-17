@@ -66,4 +66,4 @@ class Polynomial(ContinuumBasis):
         return self.deg + 1
     
     def design_matrix(self, λ):
-        return np.vander(λ, self.deg + 1)
+        return np.vander(λ - np.mean(λ), self.deg + 1)
