@@ -101,13 +101,13 @@ shadow=false,
 Forward modelling stellar spectra usually requires a spectral synthesis code, or some non-linear interpolator constructed from a curated training set.
 These approaches require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias subsequent measurements.
 Here we present a \emph{linear} model that simultaneously fits stellar absorption, telluric transmission, and the joint continuum-instrument response.
-The joint continuum-instrument response is modelled with a Fourier basis. Stellar absorption and telluric transmission is each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
+Stellar absorption and telluric transmission is each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
 The non-negativity constraint ensures that basis vectors are strictly additive.
+The joint continuum-instrument response is modelled with a Fourier basis. 
 Together this set of bases represents a very effective linear model for stellar spectroscopy, where the linearity ensures that inference is convex, stable, and fast.
-This model allows us to reliably fit the stellar absorption, tellurics, continuum, radial velocity, and rotational broadening, without any prior knowledge about the fundamental stellar parameters.
+This model allows us to reliably fit nuisance parameters (e.g., tellurics, continuum, radial velocity, rotational or macroscopic broadening), without any prior knowledge about the fundamental stellar properties.
 We demonstrate our method by fitting \eso/\harps\ high-resolution echelle spectra of OBAFGKM-type stars.
-% TODO: talk about how fast it is for 10^6 pixels and hundreds of params?
-We show from repeat observations of $\alpha$-Centauri A that our approach yields continuum estimates that are about five times more consistent than the best existing methods: better than 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30.
+We show from repeat observations of $\alpha$-Centauri A that our approach yields continuum estimates that are consistent to 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30.
 \end{abstract}
 
 % for S/N > 100, 1-sigma scatter is 0.22%
@@ -253,6 +253,14 @@ We searched the \eso\ data archive and selected a set of stars that span the ran
 We downloaded a psuedo-random exposure for each star. No explicit cut to ensure a minimum signal-to-noise (SNR) ratio, but in practice most exposures have high SNR. We took the measured radial velocity in the calibration files for each spectrum and the computed Barycentric Earth radial velocity to shift the stellar absorption basis vectors to the observed frame.\\
 
 We modelled the continuum in each echelle order as a set of $\todo{M}$ Fourier modes. With $\todo{\approx{70}}$ echelle orders, $\todo{K}$ stellar basis vectors, and $\todo{L}$ telluric vectors, there are $\todo{400}$ parameters and $\sim3\times10^6$ data points. Without \emph{any prior knowledge of the stellar parameters}, we directly solve the (unconstrained) weighted least-squares system (Equation~\ref{eq:wls}). If the solution is outside the parameter bounds, we optimize from this position using truncated reflective trust region algorithm.\\
+
+
+
+\begin{figure*}
+    \includegraphics[width=\textwidth, height=\textwidth]{../code/harps_examples.pdf}
+    \caption{Continuum-rectified \harps\ spectra of example spectral types from B to M. The model used here includes 16 basis vectors for stellar absorption, and 4 basis vectors for telluric transmission.\label{fig:harps-examples}}
+\end{figure*}
+
 
 \section{Results} \label{sec:results}
 

@@ -256,7 +256,7 @@ def harps(path, **kwargs):
 
 
 def get_blaze(e2ds_path):
-    blaze_path = glob(os.path.dirname(path) + "/*_blaze_" + path[-6:])
+    blaze_path = glob(os.path.dirname(e2ds_path) + "/*_blaze_" + e2ds_path[-6:])
     with fits.open(blaze_path[0]) as blaze_image:
         return blaze_image[0].data
 
@@ -291,10 +291,9 @@ def load_harps_e2ds(path, **kwargs):
     try:
         rv_meta = get_rv_metadata(path)
     except:
-        rv_meta = dict(bis_rv=None, berv=None, v_rel=None)
+        rv_meta = dict(bis_rv=None, berv=None, v_rel=0)
         warnings.warn(f"Could not load metadata from BIS image path at {path}")
-        raise
-    
+        
     with read_fileobj_or_hdulist(path) as hdulist:
         i, coeff = (0, [])
         header_coeff_key = "HIERARCH ESO DRS CAL TH COEFF LL{i}"

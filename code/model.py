@@ -129,7 +129,8 @@ class Clam:
         self,
         spectra: Sequence[Spectrum],
         continuum_basis: Union[ContinuumBasis, Sequence[ContinuumBasis]] = Sinusoids,
-        λ_initial: Optional[float] = 5175,
+        initial_λ: Optional[float] = 5175,
+        initial_continuum_basis: ContinuumBasis = Polynomial(1),
         R: Optional[float] = None,  
         vsini: Optional[float] = None,
         op_kwds: Optional[dict] = None,
@@ -141,12 +142,12 @@ class Clam:
         if initial_order is not None:
             spectrum = initial_order
         else:
-            spectrum = get_closest_order(spectra, λ_initial)
+            spectrum = get_closest_order(spectra, initial_λ)
 
         (λ_rest_vacuum, λ_vacuum, z, inv_sigma_z, oi, pi, S, P), basis_vectors, *n_different_bases = self.prepare([spectrum], vsini=vsini)
         
         # TODO: using diferent initial polynomial 
-        G, *_ = _continuum_design_matrix(λ_vacuum, Polynomial(2), S, oi)
+        G, *_ = _continuum_design_matrix(λ_vacuum, initial_continuum_basis, S, oi)
 
         A = np.hstack([-basis_vectors.T, G])
                 
@@ -200,9 +201,7 @@ class Clam:
         self,
         spectra: Sequence[Spectrum],
         continuum_basis: Union[ContinuumBasis, Sequence[ContinuumBasis]] = Sinusoids,
-        R: Optional[float] = None,
         vsini: Optional[float] = None,
-        callback: Optional[callable] = None,
         op_kwds: Optional[dict] = None,
         **kwargs
     ):
@@ -216,25 +215,17 @@ class Clam:
             The continuum basis to use. This can be a single instance of a continuum basis
             or a sequence of continuum bases. If a sequence is given, then the length must
             match the number of orders in the spectra.
+
+        :param vsini: [optional]
+            The projected rotational velocity of the star in km/s.
         
-        :param R: [optional]
-            The spectral resolution of the observations. If `None` is given, then no
-            convolution will take place; the basis vectors will be interpolated.
-        
-        :param p0: [optional]
-            An initial guess for the model parameters.
-        
-        :param telluric: [optional]
-            Specify whether to model tellurics.
-        
-        :param callback: [optional]
-            A function to call after each iteration of the optimization.
+        :param op_kwds: [optional]
+            Keyword arguments to pass to `scipy.optimize._lsq.trf_linear`.
         """
         
         (p0, prepared_spectra, prepared_continuum, basis_vectors, n_stellar_bases, n_telluric_bases) = self.get_initial_fit(
             spectra, 
             continuum_basis, 
-            R=R,
             vsini=vsini,
             **kwargs,
         )
@@ -250,37 +241,27 @@ class Clam:
         A_sigma_z = A[use] * use_inv_sigma_z[:, None]
         Y_sigma_z = z[use] * use_inv_sigma_z
 
-        max_iter, tol = (10_000, np.finfo(float).eps)
-        '''
+        epsilon = np.finfo(float).eps
         kwds = dict(
-            method="trf", 
-            max_iter=1, 
-            tol=np.finfo(float).eps,
-            bounds=bounds,
+            x_lsq=p0,
+            lb=bounds[0],
+            ub=bounds[1],
+            tol=epsilon,
+            lsmr_tol=epsilon,
+            max_iter=10_000,
+            lsq_solver="exact",
             verbose=2,
         )
         kwds.update(op_kwds or {})
-        result = op.lsq_linear(A_sigma_z, Y_sigma_z, **kwds)
-        '''
         t_init = time()
-        result = trf_linear(
-            A_sigma_z, 
-            Y_sigma_z, 
-            p0, 
-            *bounds, 
-            tol=tol,
-            lsq_solver="exact",
-            lsmr_tol=tol,
-            max_iter=max_iter,
-            verbose=2
-        )
+        result = trf_linear(A_sigma_z, Y_sigma_z, **kwds)
         t_op = time() - t_init
         
-        print(f"took {t_op:.1f} s to optimize {A.shape[1]} parameters with {Y_sigma_z.size} data points")
+        print(f"Took {t_op:.1f} s to optimize {A.shape[1]} parameters with {Y_sigma_z.size} data points")
 
         n_bases = n_stellar_bases + n_telluric_bases
 
-        if sum(n_continuum_params) > 0:       
+        if sum(n_continuum_params) > 0:
             y_pred = [np.exp(A[:, n_bases:] @ result.x[n_bases:])] # continuum
         else:
             y_pred = [np.ones_like(flux)]
@@ -297,6 +278,9 @@ class Clam:
             y_pred.append(np.nan * np.ones_like(y_pred[0])) # rectified_telluric_flux        
                 
         y_pred = np.array(y_pred)
+
+        # NaN-ify pixels that were not used in the fit
+        y_pred[:, ~use] = np.nan
         
         continuum, rectified_model_flux, rectified_telluric_flux = zip(*[y_pred[:, oi == i] for i in range(1 + max(oi))])
         return (result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred)
@@ -340,11 +324,6 @@ def get_closest_order(spectra, λ):
 
 
 
-def _solve_X(flux: Sequence[float], ivar: Sequence[float], A: np.array):
-    MTM = A.T @ (ivar[:, None] * A)
-    MTy = A.T @ (ivar * flux)
-    theta = np.linalg.solve(MTM, MTy)
-    return theta
         
         
 def instantiate(item, **kwargs):
@@ -412,155 +391,3 @@ def _interpolate_basis_vector(λ, stellar_vacuum_wavelength, basis_vectors):
     for c, basis_vector in enumerate(basis_vectors):
         bv[c] = np.interp(λ, stellar_vacuum_wavelength, basis_vector, left=0, right=0)
     return bv
-
-
-
-
-if __name__ == "__main__":
-    
-    from astropy.io import fits
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-
-
-
-    spectra = []
-    #with fits.open(f"../HARPS.2009-05-12T00-55-28.664_e2ds_A.fits") as image:
-    #with fits.open(f"../HARPS.2022-12-08T01-24-25.594_e2ds_A.fits") as image:
-    #with fits.open("../ADP.2014-09-23T11-02-38.770/HARPS.2009-05-12T00-55-28.664_e2ds_A.fits") as image:
-    #with fits.open("/Users/andycasey/research/continuum/applications/harps/HD109536/HARPS.2009-04-21T00-00-27.670_e2ds_A.fits") as image:
-    #with fits.open("/Users/andycasey/research/continuum/applications/harps/alfCenA/archive (5)/HARPS.2012-06-19T23-22-13.907_e2ds_A.fits") as image:
-    with fits.open("/Users/andycasey/research/continuum/applications/harps/alfCenA/HARPS.2010-05-18T02-10-08.981_e2ds_A.fits") as image:
-        i, coeff = (0, [])
-        header_coeff_key = "HIERARCH ESO DRS CAL TH COEFF LL{i}"
-        while image[0].header.get(header_coeff_key.format(i=i), False):
-            coeff.append(image[0].header[header_coeff_key.format(i=i)])
-            i += 1
-
-        n_orders, n_pixels = image[0].data.shape
-        x = np.arange(n_pixels)# - n_pixels // 2
-
-        coeff = np.array(coeff).reshape((n_orders, -1))
-        λ = np.array([np.polyval(c[::-1], x) for c in coeff])
-
-        n_pixels = 0
-        for i in range(n_orders - 1): # ignore last order until we have a good telluric model
-            flux = image[0].data[i]
-            ivar = 1/image[0].data[i]
-            bad_pixel = (flux == 0) | ~np.isfinite(flux) | (flux < 0)
-            flux[bad_pixel] = 0
-            ivar[bad_pixel] = 0
-
-            na_double = (5898 >= λ[i]) * (λ[i] >= 5886)
-            ivar[na_double] = 0
-
-            spectra.append(Spectrum(λ[i], flux, ivar, vacuum=False))
-            n_pixels += flux.size
-
-
-    fig, ax = plt.subplots()
-    for i, spectrum in enumerate(spectra):
-        ax.plot(spectrum.λ, spectrum.flux, c='k', label=r"$\mathrm{Data}$" if i == 0 else None, zorder=-10)
-
-
-    #spectra = [spectra[50]]#, spectra[20]]
-    #spectra[0].flux = rotational_broadening_kernel(spectra[0].λ, 50, 0.6) @ spectra[0].flux
-
-    #model.stellar_basis_vectors[:, -1] = 0
-    #model.stellar_basis_vectors[:, 25] = 0
-    with open("../20240816_train_harps_model.pkl", "rb") as fp:
-        λ, label_names, parameters, W, H = pickle.load(fp)
-
-    with open("../20240816_train_telfit_model.pkl", "rb") as fp:
-        tel_λ, tel_label_names, tel_parameters, tel_W, tel_H = pickle.load(fp)
-
-    # Let's fit every order individually and see what happens.
-    
-    model = Clam(
-        λ, 
-        H,
-    )
-
-    (result, continuum, rectified_model_flux, rectified_telluric_flux, y_pred) = model.fit(
-        spectra, 
-        continuum_basis=Polynomial(2),
-    )
-
-    import matplotlib
-    from mpl_utils import mpl_style
-    matplotlib.style.use(mpl_style)
-    
-    import matplotlib.pyplot as plt
-    fig, axes = plt.subplots(2, 2, figsize=(10, 4), gridspec_kw=dict(width_ratios=(4, 1)))
-    
-    flux = np.zeros((model.stellar_vacuum_wavelength.size, len(spectra)))
-    ivar = np.zeros((model.stellar_vacuum_wavelength.size, len(spectra)))
-
-    combined_flux = np.zeros(model.stellar_vacuum_wavelength.size)
-
-    for i, spectrum in enumerate(spectra):
-        for ax in axes[0]:
-            ax.plot(spectrum.λ, spectrum.flux, c='k', label=r"$\mathrm{Data}$" if i == 0 else None, zorder=-10)
-
-    model_color = "#1e81b0" # "#4e79a5" # "tab:blue"
-    continuum_color = "#063970" # "#77b7b2" # "#666666"
-    ylim = axes[0,0].get_ylim()
-
-    for i, spectrum in enumerate(spectra):
-        flux[:, i] = np.interp(model.stellar_vacuum_wavelength, spectrum.λ, spectrum.flux / continuum[i], left=0, right=0)
-        ivar[:, i] = np.interp(model.stellar_vacuum_wavelength, spectrum.λ, spectrum.ivar * continuum[i]**2, left=0, right=0)
-        for ax in (axes[0, 0], axes[0, 1]):
-            ax.plot(spectrum.λ, continuum[i], c=continuum_color, label=r"$\mathrm{Continuum~model}$" if i == 0 else None, zorder=3)
-            ax.plot(spectrum.λ, continuum[i] * rectified_model_flux[i], c=model_color, label=r"$\mathrm{Stellar~model}$" if i == 0 else None, lw=1, zorder=-4)    
-        #axes[0].plot(spectrum.λ, continuum[i] * rectified_telluric_flux[i], c="tab:blue", label=r"$\mathrm{Telluric~model}$" if i == 0 else None, zorder=-5)    
-        model_flux = continuum[i] * rectified_model_flux[i] * rectified_telluric_flux[i]
-
-        #axes[0].plot(spectrum.λ, spectrum.flux - continuum[i] * rectified_model_flux[i], c="k")
-
-        #axes[0].plot(spectrum.λ, spectrum.flux - model_flux, c="k")
-        #axes[1].plot(spectrum.λ, spectrum.flux / continuum[i], c='k', zorder=-10)
-        for ax in (axes[1, 0], axes[1, 1]):
-            ax.plot(spectrum.λ, rectified_model_flux[i], c=model_color, zorder=-4)    
-        
-        #axes[1].plot(spectrum.λ, rectified_telluric_flux[i], c="tab:blue", lw=1, zorder=-5)
-        #axes[1].plot(spectrum.λ, spectrum.flux / continuum[i] - (rectified_model_flux[i] * rectified_telluric_flux[i]), c="k")    
-    
-    non_finite = (~np.isfinite(flux)) | (~np.isfinite(ivar))
-    flux[non_finite] = 0
-    ivar[non_finite] = 0
-    sum_ivar = np.sum(ivar, axis=1)
-    combined_flux = np.sum(flux * ivar, axis=1) / sum_ivar
-
-    for ax in (axes[1, 0], axes[1, 1]):
-        ax.axhline(1.0, c="#666666", ls=":", lw=0.5)
-        ax.plot(model.stellar_vacuum_wavelength, combined_flux, c='k', zorder=-10)
-
-    axes[0, 0].legend(frameon=False, loc="upper left", ncol=4)
-    axes[0, 0].set_ylim(ylim)
-    for ax in axes[1]:
-        ax.set_ylim(-0.1, 1.2)
-    axes[1, 0].set_xlabel(r"$\mathrm{Vacuum~wavelength}$ $[\mathrm{\AA}]$")
-    axes[0, 0].set_ylabel(r"$\mathrm{Counts}$")
-    axes[1, 0].set_ylabel(r"$\mathrm{Rectified~flux}$")
-    
-    c, e = (3950, 40)
-    for ax in (axes[0, 1], axes[1, 1]):
-        ax.set_xlim(c - e, c + e)
-        ax.set_yticks([])        
-
-    for ax in axes[0]:
-        ax.set_xticks([])
-    
-    
-    ptp = np.ptp(axes[0, 0].get_ylim())
-    
-    for ax in axes[:, 0]:
-        ax.set_xlim(spectra[0].λ[0], spectra[-1].λ[-1])
-
-    ylim_max = 2.3e4
-    axes[0, 1].set_ylim(-0.05 * ylim_max, ylim_max)
-    axes[0, 0].set_ylim(-0.05 * ptp, axes[0,0].get_ylim()[1])
-    fig.tight_layout()
-    fig.savefig("../../../paper/harps-alfCenA-example.pdf", dpi=300)
-
