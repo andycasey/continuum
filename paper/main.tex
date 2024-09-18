@@ -122,7 +122,8 @@ Here we present a \emph{linear} model that simultaneously fits stellar absorptio
 Stellar absorption and telluric transmission are each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
 The non-negativity constraint ensures that basis vectors are strictly additive.
 The joint continuum-instrument response is modelled with a Fourier basis. 
-Together this set of bases represents a very effective linear model for stellar spectroscopy, where the linearity ensures that inference is convex, stable, and fast.
+Together this set of bases represents a very effective linear model for stellar spectroscopy. 
+The model requires no initial guess or tuning, and the linearity ensures that inference is convex, stable, and fast.
 This model allows us to reliably fit nuisance parameters (e.g., tellurics, continuum, radial velocity, rotational or macroscopic broadening), without any prior knowledge about the fundamental stellar properties.
 We demonstrate our method by fitting \todo{toy models of M-dwarf spectra where we recover the correct continuum, and by fitting} \eso/\harps\ high-resolution echelle spectra of OBAFGKM-type stars.
 From repeat observations of $\alpha$-Centauri A we show that our approach yields continuum estimates that are consistent to 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30.
@@ -200,7 +201,7 @@ The factorization of $-\log\left({\vec{S}}\right)$ into $\vec{W}_\star\transpose
 
 There are very few requirements of the theoretical spectral grid. There are no requirements on the number of dimensions (e.g., whether or not to include $[\alpha/\mathrm{Fe}]$, $[\mathrm{C/Fe}]$), and no strict requirements (see Section~\ref{sec:discussion}) on spacing in between points. The only implicit requirement is that the theoretical spectra should approximately span the range of stars that you intend to fit. This is more of a recommendation than a requirement: in practice we found that a grid trained on theoretical spectra of A- to M-type stars was also sufficiently flexible to model many O-type stars. For these reasons, we chose to include as many theoretical spectra as our memory constraints would allow.\footnote{If the number of spectra exceeds your memory constraints then there are numerous strategies available: you can use memory-mapped arrays, use lower precision float types, compute updates in batches, or simply skip every $n$th spectrum.}\\
 
-We used the BOSZ spectral grid to construct basis vectors for a stellar line absorption model. This is a high-resolution ($\mathcal{R} \sim 300{,}000$) finely sampled theoretical grid computed using the \project{ATLAS9} code with \project{MARCS} models atmospheres. The grid spans a reasonably large range in stellar parameters, covers the complete wavelength range of the \eso/\harps\ instrument, and importantly it includes the theoretical continuum for each spectrum. We constructed a sparse kernel to convolve the rectified flux to the \eso/\harps\ spectral resolution of $\mathcal{R} \sim 115{,}000$, truncated the convolved spectra between 300-700\,nm, and clipped any rectified flux values exceeding 1 (e.g., emission lines) as they violate our NMF requirements. The matrix $\vec{S}$ includes all \todo{X} convolved BOSZ spectra, with \todo{N} pixels each, which we randomly shuffled before factorization. We then factorized this matrix into $K = 16$ basis vectors by coordinate descent for \todo{10,000} steps, \todo{and then X steps using multiplicative updates}. After training, the Frobenius loss, also known as the L2 reconstruction loss
+We used the BOSZ spectral grid to construct basis vectors for a stellar line absorption model. This is a high-resolution ($\mathcal{R} \sim 300{,}000$) finely sampled theoretical grid computed using the \project{ATLAS9} code with \project{MARCS} spherical and plane-parallel models atmospheres. While the grid does include spectra for hotter stars computed with ATLAS atmospheres, we restricted ourselves to MARCS model atmospheres for this work. The grid spans a reasonably large range in stellar parameters, covers the complete wavelength range of the \eso/\harps\ instrument, and importantly it includes the theoretical continuum for each spectrum. We constructed a sparse kernel to convolve the rectified flux to the \eso/\harps\ spectral resolution of $\mathcal{R} \sim 115{,}000$, truncated the convolved spectra between 300-700\,nm, and clipped any rectified flux values exceeding 1 (e.g., emission lines) as they violate our NMF requirements. The matrix $\vec{S}$ includes all \todo{X} convolved BOSZ spectra, with \todo{N} pixels each, which we randomly shuffled before factorization. We then factorized this matrix into $K = 16$ basis vectors by coordinate descent for \todo{10,000} steps, \todo{and then X steps using multiplicative updates}. After training, the Frobenius loss, also known as the L2 reconstruction loss
 \begin{eqnarray}
     L_2 = \norm{{\left(-\log{\vec{S}}\right) - \vec{W}_\star\transpose\vec{F}}}^2
 \end{eqnarray}
@@ -262,14 +263,11 @@ Given some log-transformed observed flux $\vec{Y}$ and associated covariance mat
 \begin{eqnarray}
     \vec{\tilde{X}} = (\vec{A}\transpose\vec{C}^{-1}\vec{A})^{-1}\vec{A}\transpose\vec{C}^{-1}\vec{Y}
 \end{eqnarray}
-\noindent{}but this solution is not subject to the constraints $\vecalpha \geq 0$ and $\vecbeta \geq 0$. There are a few ways to solve this system subject to the boundary constraints, but the choice is not very important because the problem is convex. For simplicity we use the truncated reflective trust region algorithm where we stop optimizing once the relative tolerance has improved by less than $10^{-16}$.\\
-
-
+\noindent{}but this solution is not subject to the constraints $\vecalpha \geq 0$ and $\vecbeta \geq 0$. There are a few ways to solve this system subject to the boundary constraints, but the choice is not very important because the problem is convex. For simplicity we use the truncated reflective trust region algorithm where we stop optimizing once the relative tolerance has improved by less than $10^{-16}$.
 %In later sections we describe some situations where we may want to penalize values of $\vecalpha$. We perform this by feature weighting, which is equivalent to setting a prior on the distribution that $\vecalpha$ can be drawn from. We introduce the feature weighting matrix $\vec{\Lambda}$, where $K$ is the number of basis vectors chosen for NMF and $L$ is the number of Fourier modes. We set the first $K \times K$ elements of $\vec{\Lambda}$ to $\mathrm{Cov}{\left(\vec{W}\vec{W}\transpose\right)}$ and set all other elements of $\vec{\Lambda}$ to zero. We can scale the strength of this feature weighting by a scalar $\lambda$ (\todo{nomenclature overload of lambda}) and solve for the parameters $\vec{\tilde{X}}$ with
 %\begin{eqnarray}
 %    \vec{\tilde{X}} = (\vec{A}\transpose\vec{C}^{-1}\vec{A} + \lambda\vec{\Lambda})^{-1}\vec{A}\transpose\vec{C}^{-1}\vec{Y} %\quad .
 %\end{eqnarray}\\
-
 After solving for $\vec{\tilde{X}}$, the (un-transformed) quantities can be easily computed:
 \begin{eqnarray}
     \mathrm{rectified~stellar~flux}, \quad &f& = \exp{\left(-\vec{F}\transpose\boldsymbol{\tilde{\alpha}}\right)} \\
@@ -278,15 +276,28 @@ After solving for $\vec{\tilde{X}}$, the (un-transformed) quantities can be easi
 \end{eqnarray}
 
 
-\section{Data} \label{sec:data}
+\section{Experiments} \label{sec:experiments}
 
-Here we seek demonstrate the effectiveness of our model on high-resolution echelle spectra: a scenario in which there are lots of data, and lots of nuisances. The nuisances (e.g., continuum parameters per order; tellurics) are often fit separately which can bias subsequent inferences, and the large data volume (e.g., $3\times10^6$~pixels per spectrum) can make even the fastest non-linear interpolators untenably slow.\\
+We assess the model using two experiments with real data. The first is to test the model on spectra across a wide range of spectral types, so that we can evaluate whether a constrained linear absorption model is an effective representation for typical stars. The second experiment involves fitting the model to spectra of the same star, taken across many different S/N ratios, to test how consistent the rectified spectra are as a function of S/N ratio.\\
 
-We searched the \eso\ data archive and selected a set of stars that span the range of spectral types and evolutionary states observed with the \harps\ instrument. The set include OBAFGKM-type stars, main-sequence stars, and red giant branch stars. This selection is not intended to be complete, but is meant to demonstrate the effectiveness of a single linear model for fitting stars across a range of stellar parameters and evolutionary states. \\
+The model we describe has most value in situations where there are lots of data, and many nuisance parameters. One example is high-resolution echelle spectra where there are different continuum parameters per order, and the large number of data points (e.g., $\sim10^6$~pixels/spectrum) can make even the fastest non-linear interpolators (or spectrum emulators) untenably slow.\\
 
-We downloaded a psuedo-random exposure for each star. No explicit cut to ensure a minimum signal-to-noise (SNR) ratio, but in practice most exposures have high SNR. We took the measured radial velocity in the calibration files for each spectrum and the computed Barycentric Earth radial velocity to shift the stellar absorption basis vectors to the observed frame.\\
+For this reason, we queried a catalog of \eso/\harps\ observations to select a high-resolution echelle spectrum of each spectral type from O- to M-type. This selection is not intended to be complete, but is meant to demonstrate the effectiveness of a single linear model for fitting stars across a range of stellar parameters and evolutionary states. For each example star we downloaded a pseudo-random exposure, the details of which are shown in Table~\ref{tab:stars}. No explicit cut was made to ensure a minimum S/N ratio, but in practice most exposures are of high quality. The example OBA-type stars show significant rotational broadening. For these stars, we adopt the $v\sin{i}$ values reported by \citet{Someone} and convolve the stellar basis vectors before inference. In Section~\ref{sec:discussion} we discuss options when radial velocity or rotational broadening measurements are available.\\
 
-We modelled the continuum in each echelle order as a set of $\todo{M}$ Fourier modes. With $\todo{\approx{70}}$ echelle orders, $\todo{K}$ stellar basis vectors, and $\todo{L}$ telluric vectors, there are $\todo{400}$ parameters and $\sim3\times10^6$ data points. Without \emph{any prior knowledge of the stellar parameters}, we directly solve the (unconstrained) weighted least-squares system (Equation~\ref{eq:wls}). If the solution is outside the parameter bounds, we optimize from this position using truncated reflective trust region algorithm.\\
+
+
+\begin{figure*}
+    \includegraphics[width=\textwidth]{harps-alfCenA-example.pdf}
+    \caption{An example fit to a single \eso/\harps\ spectrum of Alpha Centauri A (black), showing the continuum fits per echelle order (dark blue), the stellar absorption model (blue) and the telluric transmission model (light blue), all fit simultaneously. Near the strong Ca H and K lines (right panels) it is clear that there are \emph{no} `continuum pixels' in those echelle orders, yet the model provides an excellent estimate of the true continuum. \label{fig:alf-cen-A-example}}
+\end{figure*}
+
+The final product of the \harps\ data reduction pipeline is a one-dimensional unrectified spectrum, resampled onto a single wavelength array where all echelle orders have been stitched together. Because we are interested in fitting the continuum on a per-order basis, we instead use the \texttt{e2ds} data products. These are extracted one-dimensional unrectified spectra of each echelle order, with the wavelength solution represented by a low order polynomial. In early experiments we fit the spect ra in these files directly, an example of which can be seen in Figure~\ref{fig:harps-alf-cen-a}. However, for some exposures we noticed systematic residuals that were consistent with a 2D artefact in the image plane (e.g., a ghost or reflection). While we expect that flat-fielding should have already removed these kinds of artefacts, it did prompt us to explore using the nightly blaze calibration files. Using the calibration blaze files mitigated much of the visible structure, and expectedly provided spectra with a simpler, flatter shape. For these reasons, in all experiments except for the one shown in Figure~\ref{fig:harps-alf-cen-a}, we chose to fit blaze-corrected echelle orders.\\
+
+When fitting each exposure we took the computed Barycentric Earth radial velocity and the radial velocity measured by the \harps\ data reduction pipeline to shift the stellar absorption basis vectors $\vec{F}$ to the observed frame. In situations where no radial velocity was available from the \harps\ data reduction pipeline, we adopted the radial velocity reported by \citep{Someone}. Each exposure has $\sim3\times10^6$ pixels across 72 echelle orders, which we model with 16 stellar basis vectors, 4 telluric vectors, and \todo{9} Fourier modes per echelle order, totalling \todo{668} model parameters.\\
+
+We used the same model setup for the second experiment, where we required many spectra taken of the same star at low and high (e.g., 10 to 200) S/N ratios. The lower bound on S/N ratio might be unrealistic since spectroscopists prefer measuring stellar parameters and chemical abundances from higher quality spectra, but the bound is necessary to evaluate performance at low S/N ratios. We searched the \eso/\harps/ catalog and found that not many stars meet this requirement. When sorted by number of exposures in descending order, Alpha Centauri A was the first star that met our requirements in repeated S/N sampling. We constructed bins of SNR from 0 to 200 in steps of 10, and selected a random $\alpha$-Centauri A spectrum (Table~\ref{tab:obs-alf-cen-a}) for every SNR bin interval to provide an even sampling of spectra at low and high S/N ratios. We fit our model to each spectrum, treating it as totally indepdendent from all others.\\
+
+
 
 
 
@@ -298,13 +309,26 @@ We modelled the continuum in each echelle order as a set of $\todo{M}$ Fourier m
 
 \section{Results} \label{sec:results}
 
-We found it usually takes a few core-seconds to fit each exposure ($3\times10^6$~pixels; all echelle orders fit simultaneously). Most of this time is spent constructing the design matrix, which requires (linearly) interpolating the stellar and telluric basis vectors to the observed wavelengths. The fits to each star are partially shown in Figure~\ref{fig:harps-example}. In all cases the data are shown in black, with the stellar absorption model in \todo{red}, telluric transmission in \todo{color}, and continuum in \todo{color}. Overall, the fits to the data are very good, with reduced $\chi^2$ values from \todo{A to B}.\\
+We found it takes a few core-seconds to fit each exposure. The software implementation released with this paper provides for each echelle order: the predicted flux; the continuum; the rectified model flux; and the telluric transmission. With these we can plot the rectified flux per echelle order, or resample the rectified flux across all echelle orders. The rectified spectra for selected example stars in the first experiment are shown in Figure~\ref{fig:harps-examples}, where stars are ordered and coloured by their spectral type. From these rectified spectra it is clear that the model performs well on a variety of stellar types and evolutionary stages. HD 45418, a B4-type star, is the hottest star in our sample  \citep[$T_\mathrm{eff} = 16750\,K$ according to ][]{2015MNRAS.454...28M}, and far exceeds the upper temperature bound (8,000\,K) of the synthetic grid that we factorized using NMF. The fit to HD 45418 is quite good, despite this star being well outside the model grid.\\
+
+All other example stars shown in Figure~\ref{fig:harps-examples} have literature stellar parameters that place them well within the bounds of the factorized model grid. Most stars observed with \eso/\harps\ are predictably on the main-sequence, since they are more frequently subject to radial velocity exoplanet searches than evolved stars. HD 203050 (K2) is the only red giant branch in our sample. This is not obvious from Figure~\ref{fig:harps-examples}, suggesting the model does just as well on red giant branch stars as it does on main-sequence stars. This has been our experience in other works using this method on SDSS-V optical and near-infrared spectra (Casey et al., in prep).\\
+
+
+The telluric models available to us are of lower spectral resolution ($\mathcal{R} \sim 25{,}000$) than \harps. This is apparent when closely comparing the fitted model with the data (e.g., if one could zoom in finely to Figure~\ref{fig:alf-cen-A-example}), but it is otherwise not obvious. While the model telluric transmission is broader than the data, the telluric basis vectors are sufficiently close enough to the data that the telluric absorption in the data is captured by the model telluric basis vectors, and they do not adversely affect the continuum fits.\\
+
+% - fitting stars of different spectral types
+
+% - fitting alpha Cen A
+
+% - 
+
+We found it usually takes a few core-seconds to fit each exposure.  The fits to each star are partially shown in Figure~\ref{fig:harps-example}. In all cases the data are shown in black, with the stellar absorption model in \todo{red}, telluric transmission in \todo{color}, and continuum in \todo{color}. Overall, the fits to the data are very good, with reduced $\chi^2$ values from \todo{A to B}.\\
 
 In bluer echelle orders, it can be seen that there are no pixels that are true `continuum' pixels (i.e., no absorption). Any continuum normalization method trying to fit these echelle orders would be biased if they did not have a good representation of what stellar spectra look like. \\
 
 Maintaining consistent continuum rectification for low signal-to-noise spectra is challenging. Without a model for stellar spectra or the relative strengths of absorption lines, noisy signals can mimic stellar absorption, causing the continuum to become systematically biased at low signal-to-noise ratios. For this reason, we sought to estimate the consistency of continuum normalization as a function of signal-to-noise ratio.\\
 
-We searched the \eso/\harps/ archive for a star that has been repeatedly observed with a wide range of exposure times, usually because it is the subject of radial velocity asteroseismic monitoring. Through this search we identified alpha Centauri A, which has been observed more than \todo{X} times with \harps. Importantly, there are $\alpha$-Centauri spectra with signal-to-noise ratios of 10, and a nearly even sampling of spectra up to S/N of 300, or even higher (where saturation is visible in the reduced spectra\footnote{Naughty observer.}). We constructed bins of SNR from 0 to 200 in steps of 10. We selected an $\alpha$-Centauri spectrum for every SNR bin interval to provide an even sampling of spectra at low and high SNR. We fit our model to each spectrum, treating it as totally indepdendent from all others.\\
+We searched the \eso/\harps/ archive for a star that has been repeatedly observed with a wide range of exposure times, usually because it is the subject of radial velocity asteroseismic monitoring. Through this search we identified alpha Centauri A, which has been observed more than \todo{X} times with \harps. Importantly, there are $\alpha$-Centauri spectra with signal-to-noise ratios of 10, and a nearly even sampling of spectra up to S/N of 300, or even higher (where saturation is visible in the reduced spectra\footnote{Naughty observer.}). \\
 
 \todo{Now we can see how things behave as a function of SNR.}
 
@@ -364,6 +388,10 @@ This is a convex problem that is mathmatically guaranteed to yield the solution 
 - setting the right covariance strength for a given model.
 
 - emission lines
+
+
+Although we use the radial velocities available from the data reduction pipeline and the literature, we note that our model is simple enough that the radial velocity (and rotational/macroscopic broadening) can be efficiently computed by \\
+
 
 \section{Conclusions}
 \label{sec:conclusions}
