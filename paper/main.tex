@@ -121,7 +121,18 @@ From repeat observations of $\alpha$-Centauri A we show that our approach yields
 
 \keywords{Some --- keywords --- here}
 
-\section*{}\clearpage
+\section*{}\noindent\todo{
+Known issues to resolve before submission:\\
+- Show basis vectors from HARPS instead of APOGEE\\
+- Update HARPS fits to use blaze-corrected flux (only AB-type stars use it now)\\
+- Update SNR vs precision to show shaded distribution instead of a single percentile\\
+- Add citations\\
+- Figure 2 doesn't have the telluric model in it, re-fit and make pretty\\
+- Update red text.
+}
+
+
+\clearpage
 \section{Introduction}\label{sec:intro}
 
 Continuum normalization\footnote{Or continuum rectification, as it was historically described.} is often required before estimating stellar parameters and chemical abundances, because these quantities are inferred from line strengths measured \emph{relative} to the continuum.
@@ -329,7 +340,7 @@ We can make quantitative statements on how consistent the continuum rectificatio
     \caption{Median observed rectified flux values as a function of S/N ratio showing that there is no bias as a function of S/N ratio.}
 \end{figure}
 
-\todo{Something about the NMF weights we find, and how they vary somewhat expectantly?}
+%\todo{Something about the NMF weights we find, and how they vary somewhat expectantly?}
 
 \section{Discussion}\label{sec:discussion}
 
@@ -363,27 +374,38 @@ We used the radial velocities reported by the \eso/\harps\ pipeline to shift ste
 
 \section{Conclusions} \label{sec:conclusions}
 
-- data-driven stuff with model specification, more flexible than it needs to be, and then there are things taht model stuff as abosrption like blaze, Ella Wang bright-oblique method,
+We introduce a novel approach to modelling stellar spectra as a linear combination of highly constrained absorption vectors, which we show is sufficient for simultaneously fitting stellar absorption, telluric transmission, and the joint continuum-instrument response. A constrained linear absorption model has many advantagous properties over alternative data-driven methods or machine learning techniques used in stellar spectroscopy. The model structure restricts basis vectors to be strictly additive, ensuring separability between the basis vectors for absorption and continuum. The model requires no initial guess or prior of the stellar parameters, and the linearity ensures that inference is robust, stable, and fast. An extension of this work could also solve for other linear nuisances (e.g., radial velocity, rotational broadening). Finally, an unexpected result of this work is that the basis vectors found from factorizing model rectified spectra appear to be highly interpretable, which is promising for their use for interpretable constrained linear absorption models.\\
+
+%Basis vectors learned by factorizing rectified grids of stellar spectra separate out into vectors that include only hydrogen lines, atomic lines, or prominent molecular features. A specific example of interpretability is shown where ony basis vector incldues only strong hydrogen lines, and at inference time we find the corresponding weight for this vector increases smoothly with spectral type (a proxy for effective temperature). 
+
+%In subsequent works we discuss applications where this interpretability is exploited (Casey et al., in prep), but main.\\
 
 
-\noindent{}We provide a Python implementation of our method in the following repository: \url{https://github.com/andycasey/continuum}.
+
+
+
+%- data-driven stuff with model specification, more flexible than it needs to be, and then there are things taht model stuff as abosrption like blaze, Ella Wang bright-oblique method,
+
+
+%\noindent{}We provide a Python implementation of our method in the following repository: \url{https://github.com/andycasey/continuum}.
 
 \paragraph{Software}
-\texttt{numpy} \citep{numpy} ---
-\texttt{matplotlib} \citep{matplotlib} ---
-\texttt{scipy} \citep{scipy}.
+\texttt{numpy} \citep{numpy}; 
+\texttt{matplotlib} \citep{matplotlib}; 
+\texttt{scipy} \citep{scipy};
+\texttt{scikit-learn} \citep{scikit_learn}.
 
 \paragraph{Acknowledgements}
-It is a pleasure to thank
-% All these people are likely co-authors, but should be thanked if they don't want to be co-authors
+If they do not become co-authors, then we should be sure to thank
     Jon Holztman (NMSU),
     Rory Smith (Monash),
     Adam Wheeler (Ohio State University),
     Andrew Saydjari (Harvard),
     David W. Hogg (New York University),
-    Megan Bedell (Flatiron Institute),
-    Michael Blanton (NYU)
-.
+    Megan Bedell (Flatiron Institute), and 
+    Michael Blanton (NYU).
+
+\todo{Utah and OzStar resources. NYU for accommodating me as I starved without free flatiron lunch.}
 % include bibliography
 \bibliographystyle{aasjournal}
 %\bibliography{bibliography}
