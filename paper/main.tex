@@ -144,7 +144,7 @@ We describe data (Section~\ref{sec:experiments}) and experiments using this mode
 
 \section{Methods}\label{sec:methods}
 
-We will assume a forward model that includes three components: one that represents continuum-normalized stellar absorption (e.g., molecular or atomic line absorption); a second to describe telluric transmission; and a third to represent the smooth continuum.\footnote{Throughout this paper when we refer to the continuum, we mean the joint continuum-instrument response. These are different things that enter multiplicatively, but cannot be disentangled without extra work.} We will require all components to be linear models, which ensures that inference is stable and fast. In practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalization and handling other nuisances.\\
+We will assume a forward model that includes three components: one that represents continuum-normalized stellar absorption (e.g., molecular or atomic line absorption); a second to describe telluric transmission; and a third to represent the smooth continuum.\footnote{In this work the `continuum' always refers to the joint continuum-instrument response. In many spectrographs these are different, but cannot be disentangled without extra work.} We will require all components to be linear models, which ensures that inference is stable and fast. In practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalization and handling other nuisances.\\
 
 % TODO: list explicit assumptions with hogg in person
 
@@ -310,7 +310,7 @@ We can make quantitative statements on the consistency of continuum rectificatio
 
 
 \begin{figure}
-    \caption{Distribution (shaded) of rectified flux of $\alpha$-Centauri A as a function of S/N ratio, with every spectrum fit independently of all others. The line represents the 95th percentile, where the scatter in this percentile is 0.46\% for spectra with S/N $>$ 30, and 0.22\% for everything with S/N $>$ 100. \label{fig:alpha-cen-wrt-snr}}
+    \caption{Distribution (shaded) of rectified flux of $\alpha$-Centauri A as a function of S/N ratio, with every spectrum fit independently. The line represents the 95th percentile, where the scatter in this percentile is 0.46\% for spectra with S/N $>$ 30, and 0.22\% for everything with S/N $>$ 100. \label{fig:alpha-cen-wrt-snr}}
 \end{figure}
 
 \section{Discussion}\label{sec:discussion}
@@ -366,13 +366,14 @@ If they do not become co-authors, then we should be sure to thank
     Rory Smith (Monash),
     Adam Wheeler (CCA),
     Andrew Saydjari (Harvard),
+    Guy Stringfellow,
     Lily Zhao (Chicago),
     Julianne Dalcanton (CCA),
     David W. Hogg (NYU),
     Megan Bedell (CCA), and
     Michael Blanton (NYU).
 
-\todo{Utah and OzStar resources. NYU for accommodating me as I starved without free flatiron lunch.}
+\todo{Acknowledge Utah and OzStar resources. Acknowledge NYU for accommodating my body as it withered without free Flatiron lunch.}
 % include bibliography
 \bibliographystyle{aasjournal}
 %\bibliography{bibliography}
