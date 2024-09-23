@@ -32,15 +32,6 @@ shadow=false,
 \newcommand{\norm}[1]{\left\lVert#1\right\rVert}
 
 % Other possible titles
-
-% TODO
-% [X] Talk about BOSZ spectra and how the model was constructed.
-% [X] Talk about how we constructed the telluric basis vectors
-% [ ] Flesh out discussion points
-% [X] Data section
-% [X] Results section
-% -> We fix vsini / v_rel from the literature, but these can be computed
-
 %\newcommand{\chosentitle}{Constrained linear models for stellar spectroscopy}
 %\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
 %\newcommand{\chosentitle}{The Unreasonable Effectiveness of Linear Models in Stellar Spectroscopy}
@@ -97,20 +88,17 @@ shadow=false,
 %\affiliation{Max-Planck-Institut f\"ur Astronomie, Heidelberg}
 %\affiliation{Center for Computational Astrophysics, Flatiron Institute, a division of the Simons Foundation}
 
-% Other people who will be invited as co-authors (non-exhaustive list):
-%   Holtzman, Wheeler, Sayjdari, Bedell, Dream team?, Astra folks?, CCA data group?
-
 
 \begin{abstract}\noindent
-Forward modelling stellar spectra usually requires a spectral synthesis code, or some non-linear interpolator constructed from a curated training set.
-These approaches require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias subsequent measurements.
-Here we present a \emph{linear} model that simultaneously fits stellar absorption, telluric transmission, and the joint continuum-instrument response.
+Forward modelling stellar spectra usually requires a spectral synthesis code, or a non-linear interpolator constructed from a curated training set.
+These approaches require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias scientific inferences.
+Here we describe a constrained \emph{linear} model that can fit radial velocity, rotational broadening, stellar absorption, telluric transmission, the joint continuum-instrument response.
 Stellar absorption and telluric transmission are each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
 The non-negativity constraint ensures that basis vectors are strictly additive.
 The joint continuum-instrument response is modelled with a Fourier basis.
-Together this set of bases represents a very effective linear model for stellar spectroscopy.
+Together this set of bases represents an effective linear model for stellar spectroscopy.
 The model requires no initial guess or tuning, and the linearity ensures that inference is convex, stable, and fast.
-This model allows us to reliably fit nuisance parameters (e.g., tellurics, continuum, radial velocity, rotational or macroscopic broadening), without any prior knowledge about the fundamental stellar properties.
+This model allows us to reliably fit nuisances (e.g., tellurics, continuum, radial velocity, rotational or macroscopic broadening), without any prior knowledge about the fundamental stellar properties.
 We demonstrate our method by fitting \eso/\harps\ high-resolution echelle spectra of BAFGKM-type stars.
 From repeat observations of $\alpha$-Centauri A we show that our approach yields continuum estimates that are consistent to 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30.
 \end{abstract}
@@ -119,7 +107,7 @@ From repeat observations of $\alpha$-Centauri A we show that our approach yields
 % for S/N > 50, 1-sigma scatter is 0.35%
 % for S/N > 30, 1-sigma scatter is 0.46%
 
-\keywords{Some --- keywords --- here}
+\keywords{\todo{Some --- keywords --- here}}
 
 \section*{}\noindent\todo{
 Known issues to resolve before submission:\\
@@ -135,21 +123,21 @@ Known issues to resolve before submission:\\
 \clearpage
 \section{Introduction}\label{sec:intro}
 
-Continuum normalization\footnote{Or continuum rectification, as it was historically described.} is often required before estimating stellar parameters and chemical abundances, because these quantities are inferred from line strengths measured \emph{relative} to the continuum.
-The practicalities of continuum rectification is ripe with subjectivity, for justified historical reasons: often a consistent procedure is more useful than an abstract one, so people tend to stick with what they know. While there is general agreement in the literature that consistent continuum normalization is important, there is no apparent consensus on how it should be done.\\
+Continuum normalization\footnote{Or continuum rectification, as it was historically described.} is often required before estimating stellar parameters and chemical abundances, because those quantities are inferred from line strengths that are measured \emph{relative} to the continuum.
+The practice of continuum rectification is ripe with subjectivity, in part for justified historical reasons. Often a consistent procedure is more useful than an abstract one, so people tend to stick with what they know, and that subjectivity is inherited by graduate students. While there is general agreement in the literature that is important to achieve consistent continuum normalization, there is no apparent consensus on how it should be done.\\
 
-There is a variety of rectification strategies used to achieve different goals. Classical spectroscopists might make some coarse estimate of the continuum for the spectrum, and locally refine the continuum for each sbsorption line of interest. This process is often done by hand,\footnote{Albeit they are often experienced hands. See \citet{Bensby:2014}: \quote{`\emph{more than 300\,000 equivalent widths were measured by (the first author's right) hand}'}.} although some graphical user interface tools exist to streamline the process and improve reproducibility. This approach usually restricts the spectroscopist to only measuring strengths of isolated lines: those that are not blended by neighbouring atomic lines or strong molecular bands. In contrast, industrial spectroscopists have a different objective: one where they solely for a \emph{consistent} continuum normalization procedure. For them the process does not have to deliver the true continuum, but it should deliver a \emph{pseudo}-continuum that is consistent for stars of similar stellar parameters and signal-to-noise (S/N) ratios.\\
+The literature describes a variety of rectification strategies used to achieve different goals. Classical spectroscopists might make some coarse estimate of the continuum for the spectrum, and locally refine that estimate for every absorption line of interest. This process is often done by hand,\footnote{Albeit they are often experienced hands. See \citet{Bensby:2014}: \quote{`\emph{more than 300\,000 equivalent widths were measured by (the first author's right) hand}'}.} although some graphical user interface tools exist to streamline the process and improve reproducibility. This approach usually restricts the spectroscopist to only measuring strengths of what are believed to be isolated lines: atomic transitions that are not contaminated by neighbouring lines or molecular bands. In contrast, industrial spectroscopists often have a different objective: one where they solely for a \emph{consistent} continuum normalization procedure. In those situations the process does not have claim to deliver the true continuum, but it should deliver a \emph{pseudo}-continuum that is consistent for stars of similar stellar parameters and signal-to-noise (S/N) ratios.\\
 
-Fitting the continuum correctly requires you to know where there is absorption. But knowing where there is line absorption requires you to (at least) know the stellar parameters. Without knowing the stellar parameters -- or having a good model for line absorption -- spectroscopists have developed various bespoke methods. A popular choice is to iteratively mask pixels in an asymmetric manner (so-called `sigma clipping') to exclude data points some chosen level below the current estimate of the continuum. This works well if the practictioner can confidently set the bounds on where to exclude data. However, those parameters would need to be different for a more metal-rich star, or for a spectrum with a low signal-to-noise (S/N) ratio. Exactly how to specify the asymmetric clipping parameters comes down to experience.\\
+Fitting the continuum correctly requires you to know where there is absorption. But knowing where there is line absorption requires you to (at least) know the stellar parameters. Without knowing the stellar parameters -- or having a good model for line absorption -- spectroscopists have developed various bespoke methods. A popular choice is to iteratively mask pixels in an asymmetric manner (so-called `sigma clipping') to exclude data points some chosen level below the current estimate of the continuum. This works well if the practictioner can confidently set the bounds on where to exclude data. However, those parameters would need to be different for a more metal-rich star, or for a spectrum with a low S/N ratio. Exactly how to specify the asymmetric clipping parameters comes down to experience.\\
 
-An alternative is simply to mask all pixels except a carefully selected set of so-called `continuum pixels'. This is painstaking work to perform manually, but can be done by iteratively training data-driven models, or building masks from approximate line strengths computed from atomic properties. In either scenario, the set of continuum pixels is only valid for stars of a similar type and metallicity. In many cases, there are simply \emph{no} continuum pixels (e.g., near a molecular absorption band in an M-dwarf), and the best we can compute is a \emph{pseudo}-continuum.\\
+An alternative is simply to mask all pixels except a carefully selected set of so-called `continuum pixels'. This is painstaking work to perform manually, but can be done by iteratively training data-driven models, or building masks from approximate line strengths computed from atomic properties. In either scenario, the set of continuum pixels is only valid for stars of a similar type and metallicity. In many cases there are simply \emph{no} continuum pixels (e.g., near a molecular absorption band in an M-dwarf). Some graphical tools exist to enable practictioners to select pseudo-continuum points to `anchor' some continuum fit (e.g., a spline, or through a rolling-pin analogy) which are useful if the practictioner wants full control over the continuum fit, or if the models are particularly poor at predicting continuum pixels.\\
 
-A variety of methods for rectifying spectra are described in the literature. \todo{Some summary of those. Includes the rolling ball thing, RASSINE, and any others?}\\
+We might simply consider what is the best continuum for every possible theoretical spectrum under comparison. When there are thousands of model spectra to compare with, then for each spectrum we can take the ratio of the data and the model, apply some averaging filter (e.g., moving mean or median) and take that as the pseudo-continuum. These kinds of approaches work remarkably well, despite the requirement of a set of (sufficiently) comparable model spectra, and the added computational expense.\\
 
 
 In an ideal scenario the continuum is jointly fit with the stellar parameters. Unfortunately, predicting the emergent spectrum is usually expensive. In Section~\ref{sec:methods} we describe a family of methods to address these problems.
-The methods we describe use non-negative matrix factorization (NMF) to approximate line absorption. NMF is a linear model to describe large non-negative matrix by two smaller matrices, both with non-negative elements. This non-negativity provides a very useful constraint that is applicable in many areas of astronomy (i.e., where things cannot physically be negative), but NMF has seen relatively little use in astronomy compared to other research areas, or other dimensionality reduction techniques.
-We discuss limitations and potential extensions of our work in Section~\ref{sec:discussion}, before concluding in Section~\ref{sec:conclusions}.\\
+The methods we describe uses non-negative matrix factorization (NMF) to approximate line absorption and telluric transmission. NMF is a linear model to describe large non-negative matrix by two smaller matrices, both with non-negative elements. This non-negativity provides a very useful constraint that is applicable in many areas of astronomy (i.e., where things cannot physically be negative), but NMF has seen relatively little use in astronomy compared to other research areas, or other dimensionality reduction techniques. 
+We describe data (Section~\ref{sec:experiments}) and experiments using this model, where the results are presented in Section~\ref{sec:results}. We discuss limitations and potential extensions of our work in Section~\ref{sec:discussion}, before concluding in Section~\ref{sec:conclusions}.\\
 
 %The typical analysis procedure for this kind of spectra might involve selecting (by hand) pixels that do not appear to be obviously affected by line (or molecular) absorption, and fitting a smooth function to represent the continuum. This process would be repeated per-order, often ignoring the selection of pixels in the previous order (which overlaps in wavelength). A subsequent local continuum determination would be made for each line.
 
@@ -395,14 +383,19 @@ We introduce a novel approach to modelling stellar spectra as a linear combinati
 \texttt{scipy} \citep{scipy};
 \texttt{scikit-learn} \citep{scikit_learn}.
 
+% Other people who will be invited as co-authors (non-exhaustive list):
+%   Holtzman, Wheeler, Sayjdari, Bedell, Dream team?, Astra folks?, CCA data group?
+
 \paragraph{Acknowledgements}
 If they do not become co-authors, then we should be sure to thank
     Jon Holztman (NMSU),
     Rory Smith (Monash),
-    Adam Wheeler (Ohio State University),
+    Adam Wheeler (CCA),
     Andrew Saydjari (Harvard),
-    David W. Hogg (New York University),
-    Megan Bedell (Flatiron Institute), and 
+    Lily Zhao (Chicago),
+    Julianne Dalcanton (CCA),
+    David W. Hogg (NYU),
+    Megan Bedell (CCA), and
     Michael Blanton (NYU).
 
 \todo{Utah and OzStar resources. NYU for accommodating me as I starved without free flatiron lunch.}
