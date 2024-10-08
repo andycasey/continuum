@@ -5,6 +5,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{MnSymbol}
+\usepackage{rotating}
 
 \renewcommand{\twocolumngrid}{}
 \addtolength{\topmargin}{-0.35in}
@@ -113,9 +114,8 @@ From repeat observations of $\alpha$-Centauri A we show that our approach yields
 Known issues to resolve before submission:\\
 - Show basis vectors from HARPS instead of APOGEE\\
 - Update HARPS fits to use blaze-corrected flux (only AB-type stars use it now)\\
-- Update SNR vs precision to show shaded distribution instead of a single percentile\\
+- In the "alpha Cen A" sample, sometimes they accidentally observed alpha Cen B and didn't realise! Maybe better to use a different star?\\
 - Add citations\\
-- Figure 2 doesn't have the telluric model in it, re-fit and make pretty\\
 - Update red text.
 }
 
@@ -264,10 +264,10 @@ We queried a catalog of \eso/\harps\ observations to select a high-resolution ec
 
 
 
-\begin{figure*}
-    \includegraphics[width=\textwidth]{harps-alfCenA-example.pdf}
-    \caption{An example fit to a single \eso/\harps\ spectrum of Alpha Centauri A (black), showing the continuum fits per echelle order (dark blue), the stellar absorption model (blue) and the \todo{telluric transmission model (light blue)}, all fit simultaneously. Near the strong Ca H and K lines (right panels) it is clear that there are \emph{no} `continuum pixels' in those echelle orders, yet the model provides an excellent estimate of the true continuum. \label{fig:alf-cen-A-example}}
-\end{figure*}
+\begin{sidewaysfigure}
+    \includegraphics[width=\textwidth]{example.pdf}
+    \caption{An example fit to a single \eso/\harps\ spectrum of HD~222595 (black), showing the continuum fits per echelle order (dotted), the stellar absorption model (red) and the telluric transmission model (blue), all fit simultaneously with a constrained linear absorption model. Near the strong Ca H and K lines it is clear that there are \emph{no} `continuum pixels' in those echelle orders, yet the model provides an excellent estimate of the true continuum. \label{fig:example-echelle}}
+\end{sidewaysfigure}
 
 The final product of the \harps\ data reduction pipeline is a one-dimensional unrectified spectrum, resampled onto a single wavelength array where all echelle orders have been stitched together. Because we are interested in fitting the continuum on a per-order basis, we instead use the \texttt{e2ds} data products. These are extracted one-dimensional unrectified spectra of each echelle order, with the wavelength solution represented by a low order polynomial. In early experiments we fit the spectra in the \texttt{e2ds} data products directly, an example of which can be seen in Figure~\ref{fig:harps-alf-cen-a}. However, for some exposures we noticed systematic residuals that could be explained by a 2D artefact in the image plane (e.g., a ghost or reflection). While we expect that flat-fielding should have already removed these kinds of artefacts, it did prompt us to explore using the nightly blaze calibration files. Using the calibration blaze files mitigated much of the visible structure, and expectedly provided spectra with a simpler, flatter shape. For these reasons, in all experiments except for the one shown in Figure~\ref{fig:harps-alf-cen-a}, we chose to fit blaze-corrected echelle orders.\\
 
@@ -296,7 +296,7 @@ The cooler stars in the example set have almost no so-called `continuum pixels' 
 
 There is good agreement between the model fits and data for example stars of different spectral types. In detail there are mis-matches in line absorption strength, or mis-matches in the form of missing lines (in either the model or the data). We discuss model mismatches in Section~\ref{sec:discussion}, but we can surmise that model mis-matches are a result of missing or inaccurate physics in the spectral synthesis code or its inputs (e.g., model atmospheres, line lists, opacities), or due to the poor linear approximation we make for the stellar spectra, or both. In any case, the model appears to be sufficiently accurate to describe the continuum without substantial bias, so it is not a major concern for our purposes.\\
 
-A separate reason for model-data disagreement comes from our use of the telluric transmission model. The telluric models available to us are of lower spectral resolution ($\mathcal{R} \sim 25{,}000$) than \harps. This is apparent when closely comparing the fitted model with the data (e.g., if one could zoom in finely to Figure~\ref{fig:alf-cen-A-example}), but it is otherwise not obvious. The model telluric transmission predicts features that are clearly broader than the data, but the telluric basis vectors are a sufficiently good description for the data that the telluric absorption does not get captured by the continuum basis vectors and adversely affect the fit.\\
+A separate reason for model-data disagreement comes from our use of the telluric transmission model. The telluric models available to us are of lower spectral resolution ($\mathcal{R} \sim 25{,}000$) than \harps. This is apparent when closely comparing the fitted model with the data (e.g., if one could zoom in finely to Figure~\ref{fig:example-echelle}), but it is otherwise not obvious. The model telluric transmission predicts features that are clearly broader than the data, but the telluric basis vectors are a sufficiently good description for the data that the telluric absorption does not get captured by the continuum basis vectors and adversely affect the fit.\\
 
 The second defined experiment tests how consistently we can predict continuum for the same star, as a function of S/N ratio. Given an imperfect (or no) model for stellar spectra, noisy signals can mimic stellar absorption, which causes the continuum to become systematically biased at low S/N ratios. We fit \todo{X} spectra of $\alpha$-Centauri A, which are sampled uniformly in S/N bins from 10 to 200 pixel$^{-1}$. This experiment forces us to select a summary statistic to evaluate the consistency of our continuum rectification. We adopt the 95th percentile in rectified flux as a statistic to compare to normalisation methods described in the literature, but we prefer to view how the \emph{distribution} of normalized flux values change as a function of S/N ratio. Both properties are shown in Figure~\ref{fig:repeatability-with-snr}, where the line indicates the 95th percentile of normalized flux, and the shaded area shows the distribution of normalized flux values. Above S/N $\sim$ 30, both indicators are extremely stable and do not vary significantly with S/N ratio. This is notable, as most spectra acquired for the purpose of stellar parameters and chemical abundances will aim for S/N $>$ 30, but spectra below S/N $<$ 50 are routinely described as being problematic to rectify consistently. From this figure it highlights that we can achieve consistent continuum normalisation whether the star has S/N $\sim$ 30 or 300. \todo{This experiment was done on non-blaze-corrected spectra. I either need to re-do it, or update the text accordingly.}\\
 
@@ -310,6 +310,7 @@ We can make quantitative statements on the consistency of continuum rectificatio
 
 
 \begin{figure}
+    \includegraphics*[width=\textwidth, height=3in]{alpha-cen-repeat-snr.pdf}
     \caption{Distribution (shaded) of rectified flux of $\alpha$-Centauri A as a function of S/N ratio, with every spectrum fit independently. The line represents the 95th percentile, where the scatter in this percentile is 0.46\% for spectra with S/N $>$ 30, and 0.22\% for everything with S/N $>$ 100. \label{fig:alpha-cen-wrt-snr}}
 \end{figure}
 
@@ -331,7 +332,9 @@ The speed of our model makes it particularly advantageous for evaluating on larg
 
 %We have demonstrated the effectiveness of a constrained linear absorption model for continuum normalization across a range of spectral types. 
 
-There are not many literature metrics to choose from when evaluating performance of continuum normalization. We have qualitatively shown the distribution of rectified flux values for $\alpha$-Centauri A, and quantitatively estimated the precision from the scatter in the 95th percentile of rectified flux values. These statistics are computed using all wavelengths, but it is well-known that continuum is easier to model at redder optical wavelengths because there are fewer absorption features. One excellent examination of continuum normalization consistency is that of \citet{RASSINE}, where they report consistent continuum normalization at the level of 2\% based on applications to extremely high quality ($S/N > 1000$) \eso/\harps\ spectra of $\alpha$-Centauri B stacked over consecutive nights, and 0.29\% for a comparably high quality spectrum of the Sun. Their statistic is defined as the 2$\sigma$ of $1-f_i$, where $f_i$ is the $i$th normalized flux value at the anchor point locations used to build the continuum. The anchor points are chosen by the user, which makes for a less direct comparison with our statistic, but for these purposes we will assume that the continuum anchor points are perfectly chosen and truely represent the continuum in the star. Given these assumptions, for comparison purposes we take \texttt{RASSINE} as providing 1\% consistency in continuum estimates for S/N $> 1000$ spectra of $\alpha$-Centauri B, and 0.15\% consitency for comparable Solar spectra. If they restrict their statistic to wavelengths redder than 4500,\AA, their precision for $\alpha$-Centauri B improves to 0.6\%. In comparison, for spectra we use that is 1/10th the S/N ratio, we find our method yields consistent continuum estimates at the level of 0.22\%.\\
+There are not many literature metrics to choose from when evaluating performance of continuum normalization. We have qualitatively shown the distribution of rectified flux values for $\alpha$-Centauri A, and quantitatively estimated the precision from the scatter in the 95th percentile of rectified flux values. These statistics are computed using all wavelengths, but it is well-known that continuum is easier to model at redder optical wavelengths because there are fewer absorption features. One excellent examination of continuum normalization consistency is that of \citet{RASSINE}, where they report consistent continuum normalization at the level of 2\% based on applications to extremely high quality ($S/N > 1000$) \eso/\harps\ spectra of $\alpha$-Centauri B stacked over consecutive nights, and 0.29\% for a comparably high quality spectrum of the Sun. Their statistic is defined as the 2$\sigma$ of $1-f_i$, where $f_i$ is the $i$th normalized flux value at the anchor point locations used to build the continuum. The anchor points are chosen by the user, which makes for a less direct comparison with our statistic, but for these purposes we will assume that the continuum anchor points are perfectly chosen and truely represent the continuum in the star. Given these assumptions, for comparison purposes we take \texttt{RASSINE} as providing 1\% consistency in continuum estimates for S/N $> 1000$ spectra of $\alpha$-Centauri B, and 0.15\% consitency for comparable Solar spectra. If they restrict their statistic to wavelengths redder than 4500\,\AA, their precision for $\alpha$-Centauri B improves to 0.6\%. In comparison, for spectra we use that is 1/10th the S/N ratio, we find our method yields consistent continuum estimates at the level of 0.22\%.\\
+
+%\todo{I really don't want to, but should I Fisher information matrix and predict how precisely we could estimate the continuum as a function of S/N for this model? It's linear so it's simple, but it adds necessitates a lot of explanatory text that is not easily digestible by my target audience (spectroscopists).}\\
 
 %\citet{Someone} also describes an estimate of the line depth precision achieved using \texttt{RASSINE}. Their estimates of line depth precision outperform (by percentage) their continuum estimates. 
 %\todo{RASSINE talk about line depth precision and i dont know if i want to get into that. if line depth precision is good but the continuum precision is bad then it doens't really matter what you line depth precision is because it will be dominated by the continuum accuracy in that we measure line depths relative to the continuum}
