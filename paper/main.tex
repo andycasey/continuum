@@ -37,7 +37,7 @@ shadow=false,
 %\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
 %\newcommand{\chosentitle}{The Unreasonable Effectiveness of Linear Models in Stellar Spectroscopy}
 %\newcommand{\chosentitle}{Stellar continuum modelling}
-\newcommand{\chosentitle}{Constrained linear models for stellar spectroscopy}
+\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
 
 \shorttitle{\chosentitle}
 \shortauthors{Casey}
@@ -112,7 +112,6 @@ From repeat observations of $\alpha$-Centauri A we show that our approach yields
 
 \section*{}\noindent\todo{
 Known issues to resolve before submission:\\
-- Show basis vectors from HARPS instead of APOGEE\\
 - Update HARPS fits to use blaze-corrected flux (only AB-type stars use it now)\\
 - In the "alpha Cen A" sample, sometimes they accidentally observed alpha Cen B and didn't realise! Maybe better to use a different star?\\
 - Add citations\\
@@ -185,8 +184,8 @@ We used the BOSZ spectral grid to construct basis vectors for a stellar line abs
 \noindent{}was found to be \todo{X}. Figure~\ref{fig:schematic} shows some example basis vectors computed by this factorization, where it is somewhat striking that the basis vectors are identifiable by astrophysical mechanism, since no stellar parameters (or astrophysics of any kind) are included in the factorization process. For example, one basis vector just includes hydrogen lines. Another basis vector only has CO-molecule lines. We expand on this in later sections.\\
 
 \begin{figure*}
-    \includegraphics*[width=\textwidth]{nmf_plot.pdf}
-    \caption{A schematic showing some basis vectors computed by non-negative matrix factorization from a grid of theoretical stellar spectra. \todo{Update this for BOSZ spectra, not APOGEE.}\label{fig:schematic}}
+    \includegraphics*[width=\textwidth]{harps-basis-vectors.pdf}
+    \caption{A schematic showing a small wavelength range of the basis vectors computed by non-negative matrix factorization from a grid of theoretical stellar spectra.\label{fig:schematic}}
 \end{figure*}
 
 
