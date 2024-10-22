@@ -73,6 +73,8 @@ shadow=false,
 \definecolor{tab:red}{HTML}{d1615d}
 \newcommand{\todo}[1]{\textcolor{tab:red}{#1}}
 
+\newcommand{\ajw}[1]{\textbf{#1}}
+
 \sloppy\sloppypar\raggedbottom\frenchspacing
 \begin{document}
 
@@ -91,13 +93,13 @@ shadow=false,
 
 
 \begin{abstract}\noindent
-Forward modelling stellar spectra usually requires a spectral synthesis code, or a non-linear interpolator constructed from a curated training set.
+Forward modelling stellar spectra usually requires a spectral synthesis code, or a non-linear interpolator \ajw{emulator?} constructed from a curated training set.
 These approaches require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias scientific inferences.
 Here we describe a constrained \emph{linear} model that can fit radial velocity, rotational broadening, stellar absorption, telluric transmission, the joint continuum-instrument response.
 Stellar absorption and telluric transmission are each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
-The non-negativity constraint ensures that basis vectors are strictly additive.
+The non-negativity constraint ensures that basis vectors are strictly additive. \ajw{consider dropping or rewording this sentence}
 The joint continuum-instrument response is modelled with a Fourier basis.
-Together this set of bases represents an effective linear model for stellar spectroscopy.
+Together this set of bases represents an effective linear model for stellar spectroscopy. \ajw{Could potentially be made more precise? see note at top of intro.}
 The model requires no initial guess or tuning, and the linearity ensures that inference is convex, stable, and fast.
 This model allows us to reliably fit nuisances (e.g., tellurics, continuum, radial velocity, rotational or macroscopic broadening), without any prior knowledge about the fundamental stellar properties.
 We demonstrate our method by fitting \eso/\harps\ high-resolution echelle spectra of BAFGKM-type stars.
@@ -122,12 +124,19 @@ Known issues to resolve before submission:\\
 \clearpage
 \section{Introduction}\label{sec:intro}
 
+\ajw{
+The abstract mostly talks about the model, and the introduction mostly talks about continuum normalization.  Would be good to more explcitly link, maybe.
+I also think that it would be good to more precisely state what about this model is good.
+Something like: it characterizes the set of all possible spectra in many few parameters than other d-d models, while still expcluding enough unphysical ``spectra'' (thanks to NN constraint) that you can, e.g. project onto it to separate spectrum from continuum (or use it for param estimation).
+}
+
 Continuum normalization\footnote{Or continuum rectification, as it was historically described.} is often required before estimating stellar parameters and chemical abundances, because those quantities are inferred from line strengths that are measured \emph{relative} to the continuum.
-The practice of continuum rectification is ripe with subjectivity, in part for justified historical reasons. Often a consistent procedure is more useful than an abstract one, so people tend to stick with what they know, and that subjectivity is inherited by graduate students. While there is general agreement in the literature that is important to achieve consistent continuum normalization, there is no apparent consensus on how it should be done.\\
+\ajw{Would be good to say that the more fundemental reason is that modelling the continuum (mostly intrumental but also stellar) is hard, and the separation is feasible for most stars.}
+The practice of continuum rectification is ripe with subjectivity, in part for justified historical reasons. Often a consistent procedure is more useful than an abstract \ajw{maybe reword} one, so people tend to stick with what they know, and that subjectivity is inherited by graduate students. While there is general agreement in the literature that is important to achieve consistent continuum normalization, there is no apparent consensus on how it should be done.\\
 
 The literature describes a variety of rectification strategies used to achieve different goals. Classical spectroscopists might make some coarse estimate of the continuum for the spectrum, and locally refine that estimate for every absorption line of interest. This process is often done by hand,\footnote{Albeit they are often experienced hands. See \citet{Bensby:2014}: \quote{`\emph{more than 300\,000 equivalent widths were measured by (the first author's right) hand}'}.} although some graphical user interface tools exist to streamline the process and improve reproducibility. This approach usually restricts the spectroscopist to only measuring strengths of what are believed to be isolated lines: atomic transitions that are not contaminated by neighbouring lines or molecular bands. In contrast, industrial spectroscopists often have a different objective: one where they solely for a \emph{consistent} continuum normalization procedure. In those situations the process does not have claim to deliver the true continuum, but it should deliver a \emph{pseudo}-continuum that is consistent for stars of similar stellar parameters and signal-to-noise (S/N) ratios.\\
 
-Fitting the continuum correctly requires you to know where there is absorption. But knowing where there is line absorption requires you to (at least) know the stellar parameters. Without knowing the stellar parameters -- or having a good model for line absorption -- spectroscopists have developed various bespoke methods. A popular choice is to iteratively mask pixels in an asymmetric manner (so-called `sigma clipping') to exclude data points some chosen level below the current estimate of the continuum. This works well if the practictioner can confidently set the bounds on where to exclude data. However, those parameters would need to be different for a more metal-rich star, or for a spectrum with a low S/N ratio. Exactly how to specify the asymmetric clipping parameters comes down to experience.\\
+Fitting the continuum correctly requires you to know where there is absorption. But knowing where there is line absorption requires you to (at least) know the stellar parameters \ajw{confused about this claim}. Without knowing the stellar parameters -- or having a good model for line absorption -- spectroscopists have developed various bespoke methods. A popular choice is to iteratively mask pixels in an asymmetric manner (so-called `sigma clipping') to exclude data points some chosen level below the current estimate of the continuum. This works well if the practictioner can confidently set the bounds on where to exclude data. However, those parameters would need to be different for a more metal-rich star, or for a spectrum with a low S/N ratio. Exactly how to specify the asymmetric clipping parameters comes down to experience.\\
 
 An alternative is simply to mask all pixels except a carefully selected set of so-called `continuum pixels'. This is painstaking work to perform manually, but can be done by iteratively training data-driven models, or building masks from approximate line strengths computed from atomic properties. In either scenario, the set of continuum pixels is only valid for stars of a similar type and metallicity. In many cases there are simply \emph{no} continuum pixels (e.g., near a molecular absorption band in an M-dwarf). Some graphical tools exist to enable practictioners to select pseudo-continuum points to `anchor' some continuum fit (e.g., a spline, or through a rolling-pin analogy) which are useful if the practictioner wants full control over the continuum fit, or if the models are particularly poor at predicting continuum pixels.\\
 
@@ -143,7 +152,7 @@ We describe data (Section~\ref{sec:experiments}) and experiments using this mode
 
 \section{Methods}\label{sec:methods}
 
-We will assume a forward model that includes three components: one that represents continuum-normalized stellar absorption (e.g., molecular or atomic line absorption); a second to describe telluric transmission; and a third to represent the smooth continuum.\footnote{In this work the `continuum' always refers to the joint continuum-instrument response. In many spectrographs these are different, but cannot be disentangled without extra work.} We will require all components to be linear models, which ensures that inference is stable and fast. In practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalization and handling other nuisances.\\
+We will assume a forward model that includes three components: one that represents continuum-normalized stellar absorption (e.g., molecular or atomic line absorption) \ajw{I think stellar lines   would be a better name for this, the relationship between actual absorption and lines is kinda subtle }; a second to describe telluric transmission; and a third to represent the smooth continuum.\footnote{In this work the `continuum' always refers to the joint continuum-instrument response. In many spectrographs these are different, but cannot be disentangled without extra work.} We will require all components to be linear models, which ensures that inference is stable and fast. In practice the linear models we construct seem sufficient to model stellar spectra for the purposes of continuum normalization and handling other nuisances.\\
 
 % TODO: list explicit assumptions with hogg in person
 
@@ -152,17 +161,18 @@ Here we will describe the method in general before outlining the implementation 
     y_i &= f(\lambda_i;\vecalpha)\hadamard{}g(\lambda_i;\vecbeta)\hadamard{}h(\lambda_i;\vecgamma) + \mbox{noise}
 \end{align}
 where the components $f(...)$, $g(...)$, and $h(...)$ are defined below. Throughout this paper we fit in (natural) log-transformed data space $\vec{Y} = \log{\vec{y}}$ with the transformed variance in the $i$-th pixel
+\ajw{you should probably say that C is the (diagonal) cov matrix}
 \begin{eqnarray}
     \vec{C}_{ii} = \left(\frac{\sigma_{y,i}}{y_i} - \frac{\sigma_{y,i}^2}{2y_i^2} + \frac{2\sigma_{y,i}^3}{8y_i^3} - \frac{6\sigma_{y,i}^4}{24y_i^4}\right)^2
 \end{eqnarray}
-\noindent{}which is computed by taking a swiftly Taylor series expansion. The log-transformation changes the element-wise product of three model components into the convenient summation:
+\noindent{}which is computed by taking a swiftly \ajw{?} Taylor series expansion. The log-transformation changes the element-wise product of three model components into the convenient summation:
 \begin{align}
     \label{eq:log_y}
     \vec{Y} &= \log{f(\vec{\lambda}; \vecalpha)} + \log{g(\vec{\lambda};\vecbeta)} + \log{h(\vec{\lambda};\vecgamma)} \quad .
 \end{align}\\
 
 We now turn to defining each model component in detail.
-The stellar absorption model $f(\lambda_i;\vecalpha)$ predicts the rectified stellar line absorption at wavelength $\lambda_i$ given parameters $\vecalpha$. We construct the line absorption model $f(\lambda_i;\vecalpha)$ from a set of $N$ continuum-normalized theoretical spectra (each with $D$ fluxes) using non-negative matrix factorization (NMF).
+The stellar absorption model $f(\lambda_i;\vecalpha)$ predicts \ajw{represents? corresponds to?} the rectified stellar line absorption at wavelength $\lambda_i$ given parameters $\vecalpha$. We construct the line absorption model $f(\lambda_i;\vecalpha)$ from a set of $N$ continuum-normalized theoretical spectra (each with $D$ fluxes) using non-negative matrix factorization (NMF).
 The theoretical spectra used to construct the line absorption model do not have to have the same wavelength sampling and instrument line spread profile as the data, but at inference time there is a need to interpolate (or evaluate) the line absorption model to the $P$ observed wavelengths.\\
 
 We refer to our $N \times D$ matrix of continuum-rectified theoretical stellar spectra as $\vec{S}$. This is a dense matrix: there are no entries of exactly zero, with many entries near 1 (no absorption). However, a small transformation to this matrix makes it extremely sparse. Numerous transformations are possible\footnote{Another sparse transformation is $1 - \vec{M}$, but this makes our resulting model non-linear.}, but for many reasons we chose to factorize the negative logarithm of $\vec{S}$ into two smaller matrices $\vec{W}_\star$ and $\vec{F}$ such that,
