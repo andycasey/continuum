@@ -37,7 +37,8 @@ shadow=false,
 %\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
 %\newcommand{\chosentitle}{The Unreasonable Effectiveness of Linear Models in Stellar Spectroscopy}
 %\newcommand{\chosentitle}{Stellar continuum modelling}
-\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
+%\newcommand{\chosentitle}{Constrained linear absorption models for stellar spectroscopy}
+\newcommand{\chosentitle}{A constrained linear model for continuum normalization of stellar spectra}
 
 \shorttitle{\chosentitle}
 \shortauthors{Casey}
@@ -83,52 +84,63 @@ shadow=false,
 \author[0000-0003-0174-0564]{Andrew R. Casey}
 \affiliation{School of Physics \& Astronomy, Monash University, Australia}
 \affiliation{Centre of Excellence for Astrophysics in Three Dimensions (ASTRO-3D)}
-\affiliation{Center for Computational Astrophysics, Flatiron Institute, a division of the Simons Foundation}
+\affiliation{Center for Computational Astrophysics, Flatiron Institute, 162 Fifth Avenue, New York, NY 10010, USA}
 
-\author{friends}
-%\author[0000-0003-2866-9403]{David W. Hogg}
-%\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University}
-%\affiliation{Max-Planck-Institut f\"ur Astronomie, Heidelberg}
-%\affiliation{Center for Computational Astrophysics, Flatiron Institute, a division of the Simons Foundation}
+\author[0000-0001-7339-5136]{Adam Wheeler}
+\affiliation{Center for Computational Astrophysics, Flatiron Institute, 162 Fifth Avenue, New York, NY 10010, USA}
+
+\author[0000-0001-9907-7742]{Megan Bedell}
+\affiliation{Center for Computational Astrophysics, Flatiron Institute, 162 Fifth Avenue, New York, NY 10010, USA}
+
+\author[0000-0003-2866-9403]{David W. Hogg}
+\affiliation{Center for Cosmology and Particle Physics, Department of Physics, New York University}
+\affiliation{Max-Planck-Institut f\"ur Astronomie, Heidelberg}
+\affiliation{Center for Computational Astrophysics, Flatiron Institute, 162 Fifth Avenue, New York, NY 10010, USA}
+
+\author[0000-0002-6561-9002]{Andrew Sayjdari}
+\affiliation{Department of Astrophysical Sciences, Princeton University, Princeton, NJ 08544, USA}
+\affiliation{Department of Physics, Harvard University, 17 Oxford St., Cambridge, MA 02138, USA}
+\affiliation{Harvard-Smithsonian Center for Astrophysics, 60 Garden St., Cambridge, MA 02138, USA}
+
+\author[0000-0002-3852-3590]{Lily Zhao}
+\affiliation{Department of Astronomy & Astrophysics, University of Chicago, 5640 S Ellis Avenue, Chicago, IL 60637, USA}
+\affiliation{Center for Computational Astrophysics, Flatiron Institute, 162 Fifth Avenue, New York, NY 10010, USA}
+
+
 
 
 \begin{abstract}\noindent
-Forward modelling stellar spectra usually requires a spectral synthesis code, or a non-linear interpolator \ajw{emulator?} constructed from a curated training set.
-These approaches require pre-processing steps (e.g., continuum rectification) which, when performed separately, can bias scientific inferences.
+Inferring stellar parameters and chemical abundances by forward modelling stellar spectra usually requires a spectral synthesis code, or an emulator constructed from a curated training set. 
+In these situations continuum normalization is often implemented as a pre-processing step that is independent of stellar parameters. This leads to results that are biased, or inconsistent at low and high signal-to-noise ratios.
+A more justified approach is to forward model spectra with all nuisances simultaneously, but in practice this can be an expensive or non-convex optimization procedure.
 Here we describe a constrained \emph{linear} model that can fit radial velocity, rotational broadening, stellar absorption, telluric transmission, the joint continuum-instrument response.
 Stellar absorption and telluric transmission are each modelled by factorizing a grid of rectified theoretical spectra into two non-negative matrices: basis weights and basis vectors.
-The non-negativity constraint ensures that basis vectors are strictly additive. \ajw{consider dropping or rewording this sentence}
+This model characterizes all possible spectra in many fewer parameters than comparable data-driven models.
+The non-negativity constraint ensures basis vectors are strictly additive, which prohibits most unphysical spectra such that we can distinguish normalized spectra from the joint instrument-continuum response.
 The joint continuum-instrument response is modelled with a Fourier basis.
-Together this set of bases represents an effective linear model for stellar spectroscopy. \ajw{Could potentially be made more precise? see note at top of intro.}
+%Together this set of bases represents a flexible linear model that can predict spectra of many types of stars, and complex continuum/instrument shapes with hundreds of parameters.
 The model requires no initial guess or tuning, and the linearity ensures that inference is convex, stable, and fast.
 This model allows us to reliably fit nuisances (e.g., tellurics, continuum, radial velocity, rotational or macroscopic broadening), without any prior knowledge about the fundamental stellar properties.
 We demonstrate our method by fitting \eso/\harps\ high-resolution echelle spectra of BAFGKM-type stars.
-From repeat observations of $\alpha$-Centauri A we show that our approach yields continuum estimates that are consistent to 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30.
+From repeat observations of $\alpha$-Centauri A we show that our approach yields continuum estimates that are consistent to 0.2\% at S/N $\sim$ 100, and better than 0.5\% at S/N $\sim$ 30. 
 \end{abstract}
 
 % for S/N > 100, 1-sigma scatter is 0.22%
 % for S/N > 50, 1-sigma scatter is 0.35%
 % for S/N > 30, 1-sigma scatter is 0.46%
 
-\keywords{\todo{Some --- keywords --- here}}
+%\keywords{\todo{Some --- keywords --- here}}
 
-\section*{}\noindent\todo{
-Known issues to resolve before submission:\\
-- Update HARPS fits to use blaze-corrected flux (only AB-type stars use it now)\\
-- In the "alpha Cen A" sample, sometimes they accidentally observed alpha Cen B and didn't realise! Maybe better to use a different star?\\
-- Add citations\\
-- Update red text.
-}
+%\section*{}\noindent\todo{
+%Known issues to resolve before submission:\\
+%- Update HARPS fits to use blaze-corrected flux (only AB-type stars use it now)\\
+%- In the "alpha Cen A" sample, sometimes they accidentally observed alpha Cen B and didn't realise! Maybe better to use a different star?\\
+%- Add citations\\
+%- Update red text.
+%}
 
 
-\clearpage
 \section{Introduction}\label{sec:intro}
-
-\ajw{
-The abstract mostly talks about the model, and the introduction mostly talks about continuum normalization.  Would be good to more explcitly link, maybe.
-I also think that it would be good to more precisely state what about this model is good.
-Something like: it characterizes the set of all possible spectra in many few parameters than other d-d models, while still expcluding enough unphysical ``spectra'' (thanks to NN constraint) that you can, e.g. project onto it to separate spectrum from continuum (or use it for param estimation).
-}
 
 Continuum normalization\footnote{Or continuum rectification, as it was historically described.} is often required before estimating stellar parameters and chemical abundances, because those quantities are inferred from line strengths that are measured \emph{relative} to the continuum.
 \ajw{Would be good to say that the more fundemental reason is that modelling the continuum (mostly intrumental but also stellar) is hard, and the separation is feasible for most stars.}
@@ -291,7 +303,7 @@ We used the same model setup for the second experiment, where we required many s
 
 \begin{figure*}
     \includegraphics[width=\textwidth, height=\textwidth]{../code/harps_examples.pdf}
-    \caption{Continuum-rectified \harps\ spectra of example spectral types from B to M. The model used here includes 16 basis vectors for stellar absorption, and 4 basis vectors for telluric transmission. \todo{Only BAF-type stars used blaze-corrected spectra. Need to download blazes for others and re-run.} \ajw{consider a lower line weight} \ajw{I feel like i'm being thick but I don't get why these ever go above 1. Also, are you sure that the clam continuum is where the theoretical continuum is for the M1 star?}}\label{fig:harps-examples}}
+    \caption{Continuum-rectified \harps\ spectra of example spectral types from B to M. The model used here includes 16 basis vectors for stellar absorption, and 4 basis vectors for telluric transmission. \todo{Only BAF-type stars used blaze-corrected spectra. Need to download blazes for others and re-run.} \ajw{consider a lower line weight} \ajw{I feel like i'm being thick but I don't get why these ever go above 1. Also, are you sure that the clam continuum is where the theoretical continuum is for the M1 star?}}\label{fig:harps-examples}
 \end{figure*}
 
 
