@@ -1,0 +1,119 @@
+This paper accomplishes the hard task to write about a very technical matter - stellar normalization - in a crisp and interesting way. It was a pleasure to read. The model presented is a promising new avenue that tries to strike a balance between data-driven approaches and forward modeling, encoding some physically motivated arguments but leaving flexibility to the model. This is innovative, and I think shows good promise for a broad range of applications (especially on large, computational demanding data-sets). I also appreciate that in several points in the paper the authors provide details about specific choices for algorithms used to obtain the results, which significantly helps with reproducibility.
+
+While I appreciate the style chosen to present as it makes the paper pleasant to read, I think that there are several instances where the manuscript should strive for a more objective and precise phrasing to improve clarity. Two points seem critical to me:
+(1) The comparison with Cretignier et al. (2020) does not seem to be rigorous enough;
+(2) Many of the advantages of the model discussed by the authors do not seem substantiated enough in this specific paper.
+
+My comments are reported by increasing line number, and reporting the line number before colons. An M preceding the line number indicates that I consider this a major comment (in terms of importance). While related to point (2) above, I anticipate only one suggestion: Cretignier et al. (2020) estimates the performance of their method by comparing with theoretical model spectra. I think that such a comparison for Experiment 1 (i.e. to compare the stellar spectrum extracted by the pipeline with a theoretical one for the corresponding star) would strengthen the paper. To push it even further one might even consider mock observations generated with models that are not contained in the training grid, for which the ground-truth would be known. This test is not required for me to accept the paper, but I would like to hear the authors' thoughts on this.
+
+Abstract:
+--------
+
+27: "Most unphysical spectra": I did not find in the paper an explanation of this sentence. Particularly, I am curious about the exceptions in which - despite the constraints - unphysical spectra are obtained.
+
+29 - 30: For the sake of completeness the description of the model should mention that there is a training required, and potentially some arbitrarity in meta parameters (e.g. K).
+
+31: Since radial velocities and broadening have not been demonstrated in the paper, this should be removed from the brackets. The authors are welcome to mention that an extension of the model to include those is possible.
+
+35: To clarify this result already at abstract level I suggest a slightly expanded phrasing, e.g. "consistent across time to 0.3% at S/N ~ 100, and to better than 0.4% at S/N ~ 30".
+
+Introduction:
+--------
+
+Paragraph 49: The difference between a "classical" and an "industrial" spectroscopist is not obvious to me. I suggest to explicitly state which are the different kinds of applications that have different requirements for continuum normalization (e.g. applications to individual objects to estimate accurate atmospheric parameters, extraction of a large number of normalized spectra from a survey, ...).
+
+Methods:
+--------
+
+Figure 1: it is not quoted in the methods section, and quoted only in Sec. 4, so it's possibly misplaced.
+
+128: Does bold-face indicate an array? Please specify.
+
+130: I tried to derive this Covariance matrix, with which I am not familiar, and suspect a mistake in the coefficient to the third order Taylor expansion. Should it be 2/6? Here is my reasoning, where dY = sigma_Y and dy = sigma_y (and I drop the "i" subscript for conciseness).
+- Since Y = ln(y), Y +- dY = ln(y +- dy).
+- Taylor expand ln(y +- dy) around y: ln(y +- dy) = ln(y) +- dy/y -+ dy^2/2y^2 +- 2dx^3/3! -+ 6dx^4/4! + O(dx^4) = ln(y) +- dy/y -+ dy^2/2y^2 +- 2dy^3/6y^3 -+ 6dy^4/24y^4 + O(dx^4)
+- We then approximate dY with the RHS of the above, and the variance follows from the definition that it equals dY^2.
+
+130: Separate to previous point: why is it necessary to expand in series to the fourth order? For the average astronomer, the error on log(x) is dx/x (me included, prior to thinking about it).
+
+134: For consistency with the rest, I suggest boldfacing lambda in Eq. (3).
+
+M 138: The discussion on the precision vs accuracy of the continuum is important in this paper. I therefore find it necessary to spend a few words about what is meant by "continuum-normalized theoretical spectra". This might seem obvious at first glance, but the wings of a broad line (e.g. hydrogen lines) might be considered as part of the continuum when interested in the abundance of a different species (e.g. iron). The normalization of theoretical spectra is supposed to be "perfect", but is it truly an unambiguous choice? How exactly is the theoretical normalization performed by the authors?
+
+141 - 143: It seems that the line spread function is accounted for in this work by convolving the model with a kernel (line 187). This sentence seems to state that this is not necessary, which creates some confusion.
+
+147: The reader might benefit from an additional explanation of why it is convenient to move to a sparse matrix.
+
+148-150: Is this transformation the NMF itself? Some of the reasons for this choice of transformation should be listed for clarity (or different parts of the paper that discuss them pointed at).
+
+M 154: How is the number of basis components (K) chosen? Is this choice critical to the success of the method?
+
+165 - 167: Here or elsewhere it would be interesting to have an estimate of the computational time required for the training with the chosen grid of models (how many are they?), and of execution time to fit an individual spectrum.
+
+171: Is there any requirement in terms of spectral resolution of the models? For typical applications in the spectral fits with which I am familiar, a resolution of about 10 times higher than the instrumentation resolving power is required.
+
+M 190: To my knowledge, the ATLAS9 code that lies at the basis of the BOSZ models is primarily designed to treat photospheric conditions in LTE, where no emission lines are expected. I am therefore wondering why do the authors have some flux values exceeding 1 after normalizing by the theoretical continuum.
+
+195: I do not find the derivation of this equation trivial, despite finding it rather intuitive. Do the authors mean that this mathematically follows from Eq. (3) and (4)?
+
+202: The implication that non-negativity of F and alpha allows h to properly fit for the continuum is not obvious, please expand a bit on it.
+
+248: I suggest to define the quantities with hat for additional clarity.
+
+Experiments:
+--------
+
+277: I suggest to include a table that summarizes The S/N for each star in the selected sample.
+
+279: To clarify: is the convolution performed after constructing the basis? Would there be a difference in constructing the basis prior to applying the convolution?
+
+M 295: I suggest to test the pipeline on different spectra for an A and B stars that are unaffected by ghosts/reflections. Since these spectral types end up being treated differently from the others to have a good result, this additional test would be a clean way to show that this is indeed due to a specificity of the two datasets chosen and not due to a difficulty of the pipeline with, e.g., fast rotating hot stars.
+
+M 305: Additional details on the choice of these meta-parameters would be really appreciated (see also comment on line 154).
+
+309: There is a degree of redundancy between the sentence "In this experiment ..." and the more precise description at Lin 316.
+
+Results:
+--------
+
+M Figure 2: A few insets showing zooms of Figure 2 would be appreciated. It would be interesting to see both regions where the model fit is particularly successful, and where it is less successful (e.g. following the discussion at lines 349 - 351, and line 358).
+
+M 325 - 343: I tend to agree with the optimism of the manuscript, but it would be useful to provide a few more quantitative arguments about the performance. Looking at Figure 2 there is a significant number of pixels that exceeds the dashed line, which I assume is the rectified continuum. Is this consistent with the photon noise distribution + emission lines? To my eye, it seems that especially for the colder spectral types there might be errors of a few % (estimated from the max excess of flux beyond 1). This is also visible in Fig. 2, with many data-pixels exceeding all model components. This precision might be sufficient for the scope of the tool and might be best-in-class, but I urge the authors to attempt their best at quantifying this. For instance, at line 340 - 341 it is mentioned that the theoretical expectation for the continuum model matches the retrieved one. This should quantified (e.g. squared residuals) and shown with a specific figure, and possibly extended to all spectral types covered.
+
+352 - 353: This is not obvious for the M1 to F6 stars blue-ward of ~4500 Angstroms. Please elaborate on the argument about this specific region.
+
+357: Why not using an adequate resolution telluric template instead, for example ESO SkyCalc?
+
+362: Could you show exactly what you mean? This would be clear from an analogous figure to Fig. 1 but for tellurics and continuum basis, which I suggest to add.
+
+M 370 - 381 and Figure 4: The metric presented in Figure 4 require some clarifications.
+1) There is no line visible in Fig. 4.
+2) What is meant by "normalised flux"? I did not find a definition.
+3) From Sec. 3 I expected a total of 20 spectra (one per bin in average S/N per pixel), hence potentially 20 points in the summary statistic presented in Fig. 4, but I see that the x-axis of the Figure is much more densely populated. This makes me think that S/N per pixel has a different meaning here compared to Sec. 3, which should be clarified. What is the x-axis exactly?
+To try and illustrate my confusion, my interpretation would be that in Figure 4 the x-axis represents the SNR in all individual pixels in the spectra considered, but I can not reconcile this with the fact that there should be stellar lines in many pixels which do not appear in Figure 4. Does this only represent the value of the continuum extracted by the NMF method, or in other words Eq. (16)?
+
+Discussion
+--------
+
+M 399 - 402: This discussion does not consider that synthetic stellar spectra are not perfect representations of the real stellar spectra. To some extent, residuals between models and data can be seen as "noise", but on the other hand these residuals could be captured by the "continuum" (e.g. broad-lines, dense forests of small molecular lines for later types). To some extent, I do worry that limiting the flexibility of the stellar models introduces stronger biases in the continuum to compensate for imprecise theoretical stellar spectra. What is the authors opinion about this? I think this should be briefly addressed here.
+
+Paragraph 404: To my knowledge, one can always choose to use a limited number of PCA components, so I do not fully follow the argument. With a limited number of PCA components, the limitation raised by the manuscript would partially be lifted. While this truncation would be arbitrary, there seems to be a degree of arbitrarily also with NMF, which has to select the number of basis vectors. Could the authors comment on this?
+
+M 420 to 452: This section of the discussion seems to place NMF somewhere in-between purely data-driven methods (e.g. with an un-interpretable basis vector as could be the case for PCA), and a fully forward-modeling approach that is less flexible than NMF. However, it is currently a little difficult to follow.
+- In the first of the two paragraphs, it claims that interpretability of the basis vectors is an advantage. Since the interpretability is not fully demonstrated in this paper, but only qualitatively discussed, I suggest to tone down the first sentence of the paragraph, and refer to Casey et al., in prep.
+- The first sentence of the second paragraph is a confusing as it seems to contradict that interpretability is an advantage as discussed in the preceding paragraph.
+- In addition, there is no guarantee that a good fit to the data equals unbiased inference of stellar parameters, especially if the model fit is very flexible as in the case of NMF. While I don't think that the authors mean to imply this, the discussion that the comparison with existing grids might lead to biased estimates of stellar parameters is somewhat misleading since this is the case also for the NMF approach. I suggest that the authors clarify this point and add a word of caution about how to best interpret the excellent fits provided by NMF.
+
+468 - 470: Is the advantage of the constrained linear model that it would allow to evaluate the squared residuals from observations for a large number of stars, unlike traditional methods?
+
+M 490 - 506: It seems to me that this comparison with Cretignier et al. (2020) is inaccurate. The way I understand Table 2 in Cretignier et al. (2020) is that:
+-The first two line entries estimate the accuracy of the continuum of a single high S/N spectrum when they compare said continuum to a theoretical prediction at the anchor points f_i.
+- The rest of the line entries estimate the same quantity when - rather than a single spectrum - a whole time series is fit.
+Instead, I do not see any estimation of the consistency of quantities across different spectra, if by consistency we mean "reproducibility" across time. Since the deviation between the models and the RASSINE retrieved continuum might be a systematic, the performance in terms of consistency of RASSINE might actually be better than 2%. Could the authors comment on this?
+
+521 - 522: The author themselves argue that the continuum obtained with NMF is only as accurate as the (inevitably somewhat inaccurate) models used. I therefore do not find it obvious that the NMF-retrieved continuum would be more accurate than a pseudo-continuum. Could the authors explain better why they think the continuum from the NMF model is better? Is it perhaps more reproducible, or interpretable, or do they have strong reason to believe that it is indeed more accurate?
+
+Conclusions
+--------
+
+Parts of the conclusions might have to be revised in light of the answers to my report.
