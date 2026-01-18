@@ -1,0 +1,87 @@
+\begin{thebibliography}{}
+\expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
+\providecommand{\url}[1]{\href{#1}{#1}}
+\providecommand{\dodoi}[1]{doi:~\href{http://doi.org/#1}{\nolinkurl{#1}}}
+\providecommand{\doeprint}[1]{\href{http://ascl.net/#1}{\nolinkurl{http://ascl.net/#1}}}
+\providecommand{\doarXiv}[1]{\href{https://arxiv.org/abs/#1}{\nolinkurl{https://arxiv.org/abs/#1}}}
+
+\bibitem[{{Barbieri}(2023)}]{Barbieri:2023}
+{Barbieri}, M. 2023, arXiv e-prints, arXiv:2312.06586, \dodoi{10.48550/arXiv.2312.06586}
+
+\bibitem[{{Bensby} {et~al.}(2014){Bensby}, {Feltzing}, \& {Oey}}]{Bensby:2014}
+{Bensby}, T., {Feltzing}, S., \& {Oey}, M.~S. 2014, \aap, 562, A71, \dodoi{10.1051/0004-6361/201322631}
+
+\bibitem[{Bickel {et~al.}(1998)Bickel, Klaassen, Ritov, \& Wellner}]{Bickel:1998}
+Bickel, P.~J., Klaassen, C. A.~J., Ritov, Y., \& Wellner, J.~A. 1998, Efficient and Adaptive Estimation for Semiparametric Models (New York: Springer)
+
+\bibitem[{{Blanco-Cuaresma} {et~al.}(2014){Blanco-Cuaresma}, {Soubiran}, {Heiter}, \& {Jofr{\'e}}}]{Blanco-Cuaresma:2014}
+{Blanco-Cuaresma}, S., {Soubiran}, C., {Heiter}, U., \& {Jofr{\'e}}, P. 2014, \aap, 569, A111, \dodoi{10.1051/0004-6361/201423945}
+
+\bibitem[{{Blanton} \& {Roweis}(2007)}]{Blanton:2007}
+{Blanton}, M.~R., \& {Roweis}, S. 2007, \aj, 133, 734, \dodoi{10.1086/510127}
+
+\bibitem[{{Bohlin} {et~al.}(2017){Bohlin}, {M{\'e}sz{\'a}ros}, {Fleming}, {Gordon}, {Koekemoer}, \& {Kov{\'a}cs}}]{Bohlin:2017}
+{Bohlin}, R.~C., {M{\'e}sz{\'a}ros}, S., {Fleming}, S.~W., {et~al.} 2017, \aj, 153, 234, \dodoi{10.3847/1538-3881/aa6ba9}
+
+\bibitem[{{Casey}(2014)}]{Casey:2014}
+{Casey}, A.~R. 2014, PhD thesis, Australian National University, Canberra
+
+\bibitem[{{Casey} {et~al.}(2016){Casey}, {Hogg}, {Ness}, {Rix}, {Ho}, \& {Gilmore}}]{Casey:2016}
+{Casey}, A.~R., {Hogg}, D.~W., {Ness}, M., {et~al.} 2016, arXiv e-prints, arXiv:1603.03040, \dodoi{10.48550/arXiv.1603.03040}
+
+\bibitem[{{Clough} {et~al.}(2005){Clough}, {Shephard}, {Mlawer}, {Delamere}, {Iacono}, {Cady-Pereira}, {Boukabara}, \& {Brown}}]{lblrm}
+{Clough}, S.~A., {Shephard}, M.~W., {Mlawer}, E.~J., {et~al.} 2005, \jqsrt, 91, 233, \dodoi{10.1016/j.jqsrt.2004.05.058}
+
+\bibitem[{{Cretignier} {et~al.}(2020){Cretignier}, {Francfort}, {Dumusque}, {Allart}, \& {Pepe}}]{Cretignier:2020}
+{Cretignier}, M., {Francfort}, J., {Dumusque}, X., {Allart}, R., \& {Pepe}, F. 2020, \aap, 640, A42, \dodoi{10.1051/0004-6361/202037722}
+
+\bibitem[{{Garc{\'\i}a P{\'e}rez} {et~al.}(2016){Garc{\'\i}a P{\'e}rez}, {Allende Prieto}, {Holtzman}, {Shetrone}, {M{\'e}sz{\'a}ros}, {Bizyaev}, {Carrera}, {Cunha}, {Garc{\'\i}a-Hern{\'a}ndez}, {Johnson}, {Majewski}, {Nidever}, {Schiavon}, {Shane}, {Smith}, {Sobeck}, {Troup}, {Zamora}, {Weinberg}, {Bovy}, {Eisenstein}, {Feuillet}, {Frinchaboy}, {Hayden}, {Hearty}, {Nguyen}, {O'Connell}, {Pinsonneault}, {Wilson}, \& {Zasowski}}]{aspcap}
+{Garc{\'\i}a P{\'e}rez}, A.~E., {Allende Prieto}, C., {Holtzman}, J.~A., {et~al.} 2016, \aj, 151, 144, \dodoi{10.3847/0004-6256/151/6/144}
+
+\bibitem[{Harris {et~al.}(2020)Harris, Millman, van~der Walt, Gommers, Virtanen, Cournapeau, Wieser, Taylor, Berg, Smith, Kern, Picus, Hoyer, van Kerkwijk, Brett, Haldane, del Río, Wiebe, Peterson, Gérard-Marchant, Sheppard, Reddy, Weckesser, Abbasi, Gohlke, \& Oliphant}]{numpy}
+Harris, C.~R., Millman, K.~J., van~der Walt, S.~J., {et~al.} 2020, Nature, 585, 357, \dodoi{10.1038/s41586-020-2649-2}
+
+\bibitem[{Hsieh \& Dhillon(2011)}]{Hsieh}
+Hsieh, C.-J., \& Dhillon, I.~S. 2011, in Proceedings of the 17th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining, KDD '11 (New York, NY, USA: Association for Computing Machinery), 1064–1072, \dodoi{10.1145/2020408.2020577}
+
+\bibitem[{Hunter(2007)}]{matplotlib}
+Hunter, J.~D. 2007, Computing in Science \& Engineering, 9, 90, \dodoi{10.1109/mcse.2007.55}
+
+\bibitem[{Lee \& Seung(2000)}]{Lee_Seung:2000}
+Lee, D., \& Seung, H.~S. 2000, in Advances in Neural Information Processing Systems, ed. T.~Leen, T.~Dietterich, \& V.~Tresp, Vol.~13 (MIT Press).
+\newblock \url{https://proceedings.neurips.cc/paper_files/paper/2000/file/f9d1152547c0bde01830b7e8bd60024c-Paper.pdf}
+
+\bibitem[{Ma{\'c}kiewicz \& Ratajczak(1993)}]{pca}
+Ma{\'c}kiewicz, A., \& Ratajczak, W. 1993, Computers \& Geosciences, 19, 303, \dodoi{https://doi.org/10.1016/0098-3004(93)90090-R}
+
+\bibitem[{{Mayor} {et~al.}(2003){Mayor}, {Pepe}, {Queloz}, {Bouchy}, {Rupprecht}, {Lo Curto}, {Avila}, {Benz}, {Bertaux}, {Bonfils}, {Dall}, {Dekker}, {Delabre}, {Eckert}, {Fleury}, {Gilliotte}, {Gojak}, {Guzman}, {Kohler}, {Lizon}, {Longinotti}, {Lovis}, {Megevand}, {Pasquini}, {Reyes}, {Sivan}, {Sosnowska}, {Soto}, {Udry}, {van Kesteren}, {Weber}, \& {Weilenmann}}]{2003Msngr.114...20M}
+{Mayor}, M., {Pepe}, F., {Queloz}, D., {et~al.} 2003, The Messenger, 114, 20
+
+\bibitem[{{Mugnes} \& {Robert}(2015)}]{2015MNRAS.454...28M}
+{Mugnes}, J.~M., \& {Robert}, C. 2015, \mnras, 454, 28, \dodoi{10.1093/mnras/stv1889}
+
+\bibitem[{{Ness} {et~al.}(2015){Ness}, {Hogg}, {Rix}, {Ho}, \& {Zasowski}}]{Ness:2015}
+{Ness}, M., {Hogg}, D.~W., {Rix}, H.~W., {Ho}, A. Y.~Q., \& {Zasowski}, G. 2015, \apj, 808, 16, \dodoi{10.1088/0004-637X/808/1/16}
+
+\bibitem[{Pedregosa {et~al.}(2011)Pedregosa, Varoquaux, Gramfort, Michel, Thirion, Grisel, Blondel, Prettenhofer, Weiss, Dubourg, Vanderplas, Passos, Cournapeau, Brucher, Perrot, \& Duchesnay}]{scikit-learn}
+Pedregosa, F., Varoquaux, G., Gramfort, A., {et~al.} 2011, Journal of Machine Learning Research, 12, 2825
+
+\bibitem[{{Prochaska} {et~al.}(2025){Prochaska}, {Westfall}, {Cooke}, {Wang}, {Hsyu}, {Davies}, {Farina}, {Pelliccia}, \& {Hennawi}}]{pypeit}
+{Prochaska}, J.~X., {Westfall}, K., {Cooke}, R., {et~al.} 2025, {PypeIt}, 1.17.2,  Zenodo, \dodoi{10.5281/zenodo.3506872}
+
+\bibitem[{{Trifonov} {et~al.}(2020){Trifonov}, {Tal-Or}, {Zechmeister}, {Kaminski}, {Zucker}, \& {Mazeh}}]{Trifonov:2020}
+{Trifonov}, T., {Tal-Or}, L., {Zechmeister}, M., {et~al.} 2020, \aap, 636, A74, \dodoi{10.1051/0004-6361/201936686}
+
+\bibitem[{Virtanen {et~al.}(2020)Virtanen, Gommers, Oliphant, Haberland, Reddy, Cournapeau, Burovski, Peterson, Weckesser, Bright, {van der Walt}, Brett, Wilson, Millman, Mayorov, Nelson, Jones, Kern, Larson, Carey, Polat, Feng, Moore, {VanderPlas}, Laxalde, Perktold, Cimrman, Henriksen, Quintero, Harris, Archibald, Ribeiro, Pedregosa, {van Mulbregt}, \& {SciPy 1.0 Contributors}}]{scipy}
+Virtanen, P., Gommers, R., Oliphant, T.~E., {et~al.} 2020, Nature Methods, 17, 261, \dodoi{10.1038/s41592-019-0686-2}
+
+\bibitem[{{Wheeler} {et~al.}(2023){Wheeler}, {Abruzzo}, {Casey}, \& {Ness}}]{Wheeler:2023}
+{Wheeler}, A.~J., {Abruzzo}, M.~W., {Casey}, A.~R., \& {Ness}, M.~K. 2023, \aj, 165, 68, \dodoi{10.3847/1538-3881/acaaad}
+
+\bibitem[{{Wheeler} {et~al.}(2024){Wheeler}, {Casey}, \& {Abruzzo}}]{Wheeler:2024}
+{Wheeler}, A.~J., {Casey}, A.~R., \& {Abruzzo}, M.~W. 2024, \aj, 167, 83, \dodoi{10.3847/1538-3881/ad19cc}
+
+\bibitem[{{Xu} {et~al.}(2019){Xu}, {Cisewski-Kehe}, {Davis}, {Fischer}, \& {Brewer}}]{Xu:2019}
+{Xu}, X., {Cisewski-Kehe}, J., {Davis}, A.~B., {Fischer}, D.~A., \& {Brewer}, J.~M. 2019, \aj, 157, 243, \dodoi{10.3847/1538-3881/ab1b47}
+
+\end{thebibliography}

@@ -1,0 +1,50 @@
+This is BibTeX, Version 0.99d (TeX Live 2025)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+The style file: aasjournal.bst
+Database file #1: bibliography.bib
+Warning--entry type for "pypeit" isn't style-file defined
+--line 82 of file bibliography.bib
+Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
+You've used 26 entries,
+            3168 wiz_defined-function locations,
+            872 strings with 13124 characters,
+and the built_in function-call counts, 13773 in all, are:
+= -- 1052
+> -- 1216
+< -- 9
++ -- 407
+- -- 441
+* -- 1318
+:= -- 2548
+add.period$ -- 27
+call.type$ -- 26
+change.case$ -- 156
+chr.to.int$ -- 26
+cite$ -- 26
+duplicate$ -- 461
+empty$ -- 765
+format.name$ -- 470
+if$ -- 2741
+int.to.chr$ -- 1
+int.to.str$ -- 0
+missing$ -- 22
+newline$ -- 87
+num.names$ -- 105
+pop$ -- 182
+preamble$ -- 1
+purify$ -- 156
+quote$ -- 0
+skip$ -- 410
+stack$ -- 0
+substring$ -- 480
+swap$ -- 23
+text.length$ -- 1
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 231
+warning$ -- 0
+while$ -- 95
+width$ -- 0
+write$ -- 290
+(There was 1 warning)
